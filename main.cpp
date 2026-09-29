@@ -137,13 +137,46 @@ void drawTree(Shader& shaderProgram, VAO& vao, float xOffset, float zOffset) {
     drawCube(shaderProgram, vao, leavesModel2, leavesColor);
 }
 
+
+
+// Function to draw a simple car
+void drawCar(Shader& shaderProgram, VAO& vao, float xOffset, float zOffset) {
+    glm::vec3 bodyColor(0.85f, 0.15f, 0.15f);  // Red body
+    glm::vec3 cabinColor(0.20f, 0.25f, 0.35f); // Dark glass cabin
+    glm::vec3 wheelColor(0.10f, 0.10f, 0.10f); // Dark wheels
+
+    // 1. Lower Body
+    glm::mat4 bodyModel = glm::mat4(1.0f);
+    bodyModel = glm::translate(bodyModel, glm::vec3(xOffset, 0.45f, zOffset));
+    bodyModel = glm::scale(bodyModel, glm::vec3(2.4f, 0.5f, 1.2f));
+    drawCube(shaderProgram, vao, bodyModel, bodyColor);
+
+    // 2. Upper Cabin (Roof)
+    glm::mat4 cabinModel = glm::mat4(1.0f);
+    cabinModel = glm::translate(cabinModel, glm::vec3(xOffset, 0.85f, zOffset));
+    cabinModel = glm::scale(cabinModel, glm::vec3(1.2f, 0.4f, 1.0f));
+    drawCube(shaderProgram, vao, cabinModel, cabinColor);
+
+    // 3. Four Wheels
+    float wheelX[] = { -0.7f, 0.7f, -0.7f, 0.7f };
+    float wheelZ[] = { -0.55f, -0.55f, 0.55f, 0.55f };
+    for (int i = 0; i < 4; i++) {
+        glm::mat4 wheelModel = glm::mat4(1.0f);
+        wheelModel = glm::translate(wheelModel, glm::vec3(xOffset + wheelX[i], 0.2f, zOffset + wheelZ[i]));
+        wheelModel = glm::scale(wheelModel, glm::vec3(0.4f, 0.4f, 0.25f));
+        drawCube(shaderProgram, vao, wheelModel, wheelColor);
+    }
+}
+
+
+
 int main() {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow* window = glfwCreateWindow(width, height, "Building, Road & Trees", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(width, height, "2107052 Kuet academic buildings", NULL, NULL);
     if (window == NULL) {
         std::cout << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
@@ -202,6 +235,9 @@ int main() {
         drawTree(shaderProgram, VAO1, -7.0f, 3.5f);
         drawTree(shaderProgram, VAO1, 0.0f, 3.5f);
         drawTree(shaderProgram, VAO1, 7.0f, 3.5f);
+
+
+        drawCar(shaderProgram, VAO1, 0.0f, 6.0f);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
