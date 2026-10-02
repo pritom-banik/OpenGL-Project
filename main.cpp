@@ -240,6 +240,149 @@ void drawSemiOval(Shader& shaderProgram, float rx, float h, float rz, glm::vec3 
 }
 
 
+
+// Generates a smooth, closed 24-segment 3D cylinder for wheels
+void drawCylinder(Shader& shaderProgram, float radius, float width, glm::mat4 model, glm::vec3 color) {
+    static GLuint cylVAO = 0;
+    static GLsizei vertexCount = 0;
+
+    if (cylVAO == 0) {
+        const int SEGMENTS = 24;
+        std::vector<GLfloat> vertices;
+
+        for (int i = 0; i < SEGMENTS; i++) {
+            float theta1 = (2.0f * glm::pi<float>() * i) / SEGMENTS;
+            float theta2 = (2.0f * glm::pi<float>() * (i + 1)) / SEGMENTS;
+
+            float y1 = std::cos(theta1), z1 = std::sin(theta1);
+            float y2 = std::cos(theta2), z2 = std::sin(theta2);
+
+            // 1. Outer Curved Wall (Normals outward)
+            vertices.insert(vertices.end(), {
+                -0.5f, y1, z1,   0.0f, y1, z1,
+                 0.5f, y1, z1,   0.0f, y1, z1,
+                -0.5f, y2, z2,   0.0f, y2, z2,
+
+                 0.5f, y1, z1,   0.0f, y1, z1,
+                 0.5f, y2, z2,   0.0f, y2, z2,
+                -0.5f, y2, z2,   0.0f, y2, z2
+                });
+
+            // 2. Right Cap (+X Face)
+            vertices.insert(vertices.end(), {
+                 0.5f, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f,
+                 0.5f, y1,   z1,    1.0f, 0.0f, 0.0f,
+                 0.5f, y2,   z2,    1.0f, 0.0f, 0.0f
+                });
+
+            // 3. Left Cap (-X Face)
+            vertices.insert(vertices.end(), {
+                -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f,
+                -0.5f, y2,   z2,   -1.0f, 0.0f, 0.0f,
+                -0.5f, y1,   z1,   -1.0f, 0.0f, 0.0f
+                });
+        }
+
+        vertexCount = static_cast<GLsizei>(vertices.size() / 6);
+
+        GLuint cylVBO;
+        glGenVertexArrays(1, &cylVAO);
+        glGenBuffers(1, &cylVBO);
+
+        glBindVertexArray(cylVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, cylVBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+        glEnableVertexAttribArray(1);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+    }
+
+    glm::mat4 scaledModel = glm::scale(model, glm::vec3(width, radius * 2.0f, radius * 2.0f));
+
+    glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "model"), 1, GL_FALSE, glm::value_ptr(scaledModel));
+    glUniform3f(glGetUniformLocation(shaderProgram.ID, "objectColor"), color.x, color.y, color.z);
+
+    glBindVertexArray(cylVAO);
+    glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+    glBindVertexArray(0);
+}
+
+// Renders a round tire with a metallic rim and visible rotating cross-spokes
+void draw3DWheel(Shader& shaderProgram, VAO& vao, glm::mat4 wheelMat, float radius, float width) {
+    glm::vec3 tireColor(0.10f, 0.10f, 0.10f);
+    glm::vec3 rimColor(0.75f, 0.75f, 0.78f);
+    glm::vec3 spokeColor(0.20f, 0.20f, 0.22f);
+
+    // Outer Rubber Tire
+    drawCylinder(shaderProgram, radius, width, wheelMat, tireColor);
+
+    // Metallic Rim
+    drawCylinder(shaderProgram, radius * 0.65f, width * 1.02f, wheelMat, rimColor);
+
+    // Visible Rotating Spokes (Rotates with wheelMat to show wheel motion)
+    glm::mat4 spoke1 = glm::scale(wheelMat, glm::vec3(width * 1.05f, radius * 1.1f, radius * 0.18f));
+    drawCube(shaderProgram, vao, spoke1, spokeColor);
+
+    glm::mat4 spoke2 = glm::scale(wheelMat, glm::vec3(width * 1.05f, radius * 0.18f, radius * 1.1f));
+    drawCube(shaderProgram, vao, spoke2, spokeColor);
+}
+
+
+
+
+
+void drawBuildingExtension(Shader& shaderProgram, VAO& vao, float xOffset, float zOffset) {
+    glm::vec3 pillarColor(0.90f, 0.90f, 0.88f);
+    glm::vec3 balconyColor(0.75f, 0.65f, 0.55f);
+    // Building boundaries along Z: Front face is at (zOffset + 2.0f)
+    float frontFaceZ = zOffset + 2.0f;
+
+    // 2. Front Extended Overhang / Portico Roof (Lower 2-floor height overhang)
+    float overhangDepth = 1.5f;
+    float overhangZ = frontFaceZ + (overhangDepth / 2.0f); // Center Z of the extended slab
+    float canopyHeight = 3.6f;                             // Height of the grand front canopy
+
+    glm::mat4 canopyModel = glm::mat4(1.0f);
+    canopyModel = glm::translate(canopyModel, glm::vec3(xOffset, canopyHeight, overhangZ));
+    canopyModel = glm::scale(canopyModel, glm::vec3(8.6f, 0.25f, overhangDepth));
+    drawCube(shaderProgram, vao, canopyModel, balconyColor);
+
+    // 3. Front Structural Pillars (Colonnade across the front facade)
+    const int NUM_PILLARS = 10;
+    float pillarZ = frontFaceZ + overhangDepth - 0.15f; // Placed at the outer edge of overhang
+    float pillarWidth = 0.2f;
+    float pillarHeight = canopyHeight;                  // Extends from ground (Y=0) to canopy
+
+    for (int p = 0; p < NUM_PILLARS; p++) {
+        // Evenly space pillars across the building width [-3.9 to +3.9]
+        float pillarX = xOffset - 3.9f + (7.8f / (NUM_PILLARS - 1)) * p;
+
+        glm::mat4 pillarModel = glm::mat4(1.0f);
+        pillarModel = glm::translate(pillarModel, glm::vec3(pillarX, pillarHeight / 2.0f, pillarZ));
+        pillarModel = glm::scale(pillarModel, glm::vec3(pillarWidth, pillarHeight, pillarWidth));
+        drawCube(shaderProgram, vao, pillarModel, pillarColor);
+    }
+
+    // 4. Horizontal Balcony Bands across the Front Facade (All 5 floors)
+    for (int i = 1; i <= 5; i++) {
+        float yPos = i * 1.3f;
+
+        // Front horizontal balcony ledge running along the facade
+        glm::mat4 frontBalcony = glm::mat4(1.0f);
+        frontBalcony = glm::translate(frontBalcony, glm::vec3(xOffset, yPos, frontFaceZ + 0.15f));
+        frontBalcony = glm::scale(frontBalcony, glm::vec3(8.3f, 0.18f, 0.30f));
+        drawCube(shaderProgram, vao, frontBalcony, balconyColor);
+    }
+}
+
+
+
 void drawBuildingBlock(Shader& shaderProgram, VAO& vao, float xOffset, float zOffset) {
     glm::vec3 mainColor(0.93f, 0.88f, 0.80f);
     glm::vec3 balconyColor(0.75f, 0.65f, 0.55f);
@@ -258,6 +401,15 @@ void drawBuildingBlock(Shader& shaderProgram, VAO& vao, float xOffset, float zOf
     // 2. Horizontal Half-Oval Balconies (5 floors)
     for (int i = 1; i <= 5; i++) {
         float yPos = i * 1.3f;
+
+
+        // Side horizontal balcony ledge running along the facade
+        glm::mat4 sideBalcony = glm::mat4(1.0f);
+        sideBalcony = glm::translate(sideBalcony, glm::vec3(xOffset, yPos, zOffset));
+        sideBalcony = glm::scale(sideBalcony, glm::vec3(8.0f, 0.18f, 4.1f));
+        drawCube(shaderProgram, vao, sideBalcony, balconyColor);
+
+
 
         // +X Side (Right Face) Balcony facing +X (0 degrees rotation)
         glm::vec3 posPlusX(xOffset + 3.0f, yPos, zOffset);
@@ -285,6 +437,8 @@ void drawFourConnectedBlocks(Shader& shaderProgram, VAO& vao, float xOffset) {
             drawCube(shaderProgram, vao, connModel, corridorColor);
         }
     }
+
+    drawBuildingExtension(shaderProgram, vao, xOffset, zPositions[3]);
 }
 
 void drawCourtyardBuilding(Shader& shader, VAO& vao, float x, float z, float w, float d, float h, float wallThick, glm::vec3 color) {
@@ -381,41 +535,275 @@ void drawTree(Shader& shaderProgram, VAO& vao, float x, float z) {
     drawCube(shaderProgram, vao, f2, foliageColor);
 }
 
-void drawCar(Shader& shaderProgram, VAO& vao, float x, float z, float dirZ) {
-    glm::vec3 bodyColor(0.85f, 0.10f, 0.10f);
-    glm::vec3 cabinColor(0.15f, 0.20f, 0.30f);
-    glm::vec3 wheelColor(0.08f, 0.08f, 0.08f);
-    glm::vec3 lightColor(0.95f, 0.95f, 0.40f);
+void drawCar(Shader& shaderProgram, VAO& vao, float x, float z, float dirZ, float wheelRot) {
+    // Color Palette (matching reference image)
+    glm::vec3 bodyColor(0.28f, 0.29f, 0.31f);      // Dark charcoal gray
+    glm::vec3 darkAccent(0.18f, 0.18f, 0.20f);     // Dark trim / bumper color
+    glm::vec3 glassColor(0.22f, 0.55f, 0.80f);     // Tinted cyan window glass
+    glm::vec3 tailLightColor(0.85f, 0.08f, 0.08f); // Red tail lights
+    glm::vec3 headLightColor(0.95f, 0.95f, 0.80f); // Bright headlights
 
     float rotation = (dirZ >= 0.0f) ? 0.0f : 180.0f;
 
     glm::mat4 carMat = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, z));
     carMat = glm::rotate(carMat, glm::radians(rotation), glm::vec3(0.0f, 1.0f, 0.0f));
 
-    glm::mat4 body = glm::translate(carMat, glm::vec3(0.0f, 0.5f, 0.0f));
-    body = glm::scale(body, glm::vec3(1.4f, 0.6f, 2.8f));
+    // -------------------------------------------------------------
+    // 1. MAIN LOWER BODY & CHASSIS (Hood, Doors & Trunk Base)
+    // -------------------------------------------------------------
+    // Main lower body shell
+    glm::mat4 body = glm::translate(carMat, glm::vec3(0.0f, 0.42f, 0.0f));
+    body = glm::scale(body, glm::vec3(1.50f, 0.45f, 3.40f));
     drawCube(shaderProgram, vao, body, bodyColor);
 
-    glm::mat4 cabin = glm::translate(carMat, glm::vec3(0.0f, 1.0f, -0.2f));
-    cabin = glm::scale(cabin, glm::vec3(1.2f, 0.5f, 1.5f));
-    drawCube(shaderProgram, vao, cabin, cabinColor);
+    // Front Bumper / Grill Guard
+    glm::mat4 frontBumper = glm::translate(carMat, glm::vec3(0.0f, 0.30f, 1.71f));
+    frontBumper = glm::scale(frontBumper, glm::vec3(1.52f, 0.22f, 0.08f));
+    drawCube(shaderProgram, vao, frontBumper, darkAccent);
 
-    glm::mat4 lightL = glm::translate(carMat, glm::vec3(-0.45f, 0.55f, 1.41f));
-    lightL = glm::scale(lightL, glm::vec3(0.25f, 0.15f, 0.05f));
-    drawCube(shaderProgram, vao, lightL, lightColor);
+    // Rear Bumper
+    glm::mat4 rearBumper = glm::translate(carMat, glm::vec3(0.0f, 0.30f, -1.71f));
+    rearBumper = glm::scale(rearBumper, glm::vec3(1.52f, 0.22f, 0.08f));
+    drawCube(shaderProgram, vao, rearBumper, darkAccent);
 
-    glm::mat4 lightR = glm::translate(carMat, glm::vec3(0.45f, 0.55f, 1.41f));
-    lightR = glm::scale(lightR, glm::vec3(0.25f, 0.15f, 0.05f));
-    drawCube(shaderProgram, vao, lightR, lightColor);
+    // -------------------------------------------------------------
+    // 2. CABIN ROOF & PILLARS
+    // -------------------------------------------------------------
+    // Flat Roof Panel
+    glm::mat4 roof = glm::translate(carMat, glm::vec3(0.0f, 1.12f, -0.15f));
+    roof = glm::scale(roof, glm::vec3(1.36f, 0.05f, 1.35f));
+    drawCube(shaderProgram, vao, roof, bodyColor);
 
-    float wX[] = { -0.75f, 0.75f, -0.75f, 0.75f };
-    float wZ[] = { 0.80f, 0.80f, -0.80f, -0.80f };
+    // Cabin Core Support Frame
+    glm::mat4 cabinCore = glm::translate(carMat, glm::vec3(0.0f, 0.88f, -0.15f));
+    cabinCore = glm::scale(cabinCore, glm::vec3(1.34f, 0.48f, 1.35f));
+    drawCube(shaderProgram, vao, cabinCore, bodyColor);
+
+    // -------------------------------------------------------------
+    // 3. SLOPED WINDSHIELDS (FRONT & REAR)
+    // -------------------------------------------------------------
+    // Front Windshield (Sloped back ~28 degrees)
+    glm::mat4 frontGlass = glm::translate(carMat, glm::vec3(0.0f, 0.90f, 0.72f));
+    frontGlass = glm::rotate(frontGlass, glm::radians(-28.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    frontGlass = glm::scale(frontGlass, glm::vec3(1.32f, 0.52f, 0.04f));
+    drawCube(shaderProgram, vao, frontGlass, glassColor);
+
+    // Rear Windshield (Sloped forward ~26 degrees)
+    glm::mat4 rearGlass = glm::translate(carMat, glm::vec3(0.0f, 0.90f, -1.02f));
+    rearGlass = glm::rotate(rearGlass, glm::radians(26.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    rearGlass = glm::scale(rearGlass, glm::vec3(1.32f, 0.50f, 0.04f));
+    drawCube(shaderProgram, vao, rearGlass, glassColor);
+
+    // -------------------------------------------------------------
+    // 4. SIDE WINDOW PANES & B-PILLARS
+    // -------------------------------------------------------------
+    // Left Side Windows
+    glm::mat4 winLeftFront = glm::translate(carMat, glm::vec3(-0.685f, 0.90f, 0.18f));
+    winLeftFront = glm::scale(winLeftFront, glm::vec3(0.03f, 0.38f, 0.55f));
+    drawCube(shaderProgram, vao, winLeftFront, glassColor);
+
+    glm::mat4 winLeftRear = glm::translate(carMat, glm::vec3(-0.685f, 0.90f, -0.48f));
+    winLeftRear = glm::scale(winLeftRear, glm::vec3(0.03f, 0.38f, 0.55f));
+    drawCube(shaderProgram, vao, winLeftRear, glassColor);
+
+    // Right Side Windows
+    glm::mat4 winRightFront = glm::translate(carMat, glm::vec3(0.685f, 0.90f, 0.18f));
+    winRightFront = glm::scale(winRightFront, glm::vec3(0.03f, 0.38f, 0.55f));
+    drawCube(shaderProgram, vao, winRightFront, glassColor);
+
+    glm::mat4 winRightRear = glm::translate(carMat, glm::vec3(0.685f, 0.90f, -0.48f));
+    winRightRear = glm::scale(winRightRear, glm::vec3(0.03f, 0.38f, 0.55f));
+    drawCube(shaderProgram, vao, winRightRear, glassColor);
+
+    // Central B-Pillars (Window separator)
+    glm::mat4 pillarL = glm::translate(carMat, glm::vec3(-0.69f, 0.90f, -0.15f));
+    pillarL = glm::scale(pillarL, glm::vec3(0.04f, 0.40f, 0.08f));
+    drawCube(shaderProgram, vao, pillarL, bodyColor);
+
+    glm::mat4 pillarR = glm::translate(carMat, glm::vec3(0.69f, 0.90f, -0.15f));
+    pillarR = glm::scale(pillarR, glm::vec3(0.04f, 0.40f, 0.08f));
+    drawCube(shaderProgram, vao, pillarR, bodyColor);
+
+    // -------------------------------------------------------------
+    // 5. LIGHTING DETAILS (Headlights & Corner Tail Lights)
+    // -------------------------------------------------------------
+    // Front Headlights
+    glm::mat4 headL = glm::translate(carMat, glm::vec3(-0.52f, 0.48f, 1.71f));
+    headL = glm::scale(headL, glm::vec3(0.28f, 0.16f, 0.04f));
+    drawCube(shaderProgram, vao, headL, headLightColor);
+
+    glm::mat4 headR = glm::translate(carMat, glm::vec3(0.52f, 0.48f, 1.71f));
+    headR = glm::scale(headR, glm::vec3(0.28f, 0.16f, 0.04f));
+    drawCube(shaderProgram, vao, headR, headLightColor);
+
+    // Vertical Corner Rear Tail Lights (Matching image)
+    glm::mat4 tailL = glm::translate(carMat, glm::vec3(-0.66f, 0.50f, -1.71f));
+    tailL = glm::scale(tailL, glm::vec3(0.12f, 0.28f, 0.04f));
+    drawCube(shaderProgram, vao, tailL, tailLightColor);
+
+    glm::mat4 tailR = glm::translate(carMat, glm::vec3(0.66f, 0.50f, -1.71f));
+    tailR = glm::scale(tailR, glm::vec3(0.12f, 0.28f, 0.04f));
+    drawCube(shaderProgram, vao, tailR, tailLightColor);
+
+    // -------------------------------------------------------------
+    // 6. ROUND ROTATING WHEELS
+    // -------------------------------------------------------------
+    float wX[] = { -0.78f, 0.78f, -0.78f, 0.78f };
+    float wZ[] = { 1.05f, 1.05f, -1.05f, -1.05f };
+    float wheelRadius = 0.15f;
+    float wheelWidth = 0.22f;
+
     for (int i = 0; i < 4; i++) {
-        glm::mat4 wheel = glm::translate(carMat, glm::vec3(wX[i], 0.25f, wZ[i]));
-        wheel = glm::scale(wheel, glm::vec3(0.3f, 0.5f, 0.5f));
-        drawCube(shaderProgram, vao, wheel, wheelColor);
+        glm::mat4 wheelMat = carMat;
+        wheelMat = glm::translate(wheelMat, glm::vec3(wX[i], wheelRadius+0.2f, wZ[i]));
+        // Rotate around local X axis based on movement distance
+        wheelMat = glm::rotate(wheelMat, glm::radians(wheelRot), glm::vec3(1.0f, 0.0f, 0.0f));
+
+        draw3DWheel(shaderProgram, vao, wheelMat, wheelRadius, wheelWidth);
     }
 }
+
+void drawBus(Shader& shaderProgram, VAO& vao, float x, float z, float dirZ, float wheelRot){
+    // KUET Bus Color Palette
+    glm::vec3 whiteBody(0.92f, 0.92f, 0.92f);
+    glm::vec3 maroonSkirt(0.50f, 0.08f, 0.12f);
+    glm::vec3 maroonStripe(0.60f, 0.10f, 0.15f);
+    glm::vec3 windowGlass(0.12f, 0.15f, 0.22f);
+    glm::vec3 grilleColor(0.75f, 0.75f, 0.78f);
+    glm::vec3 headlightColor(0.98f, 0.95f, 0.65f);
+    glm::vec3 wheelTireColor(0.10f, 0.10f, 0.10f);
+    glm::vec3 wheelRimColor(0.65f, 0.65f, 0.68f);
+    glm::vec3 mirrorColor(0.15f, 0.15f, 0.15f);
+
+    float rotation = (dirZ >= 0.0f) ? 0.0f : 180.0f;
+
+    glm::mat4 busMat = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.0f, z));
+    busMat = glm::rotate(busMat, glm::radians(rotation), glm::vec3(0.0f, 1.0f, 0.0f));
+
+    // -------------------------------------------------------------
+    // 1. LOWER CHASSIS / MAROON SKIRT (Bottom section)
+    // -------------------------------------------------------------
+    glm::mat4 skirt = glm::translate(busMat, glm::vec3(0.0f, 0.55f, 0.0f));
+    skirt = glm::scale(skirt, glm::vec3(2.2f, 0.7f, 7.6f));
+    drawCube(shaderProgram, vao, skirt, maroonSkirt);
+
+    // -------------------------------------------------------------
+    // 2. SIGNATURE HORIZONTAL MAROON ACCENT STRIPE
+    // -------------------------------------------------------------
+    glm::mat4 stripe = glm::translate(busMat, glm::vec3(0.0f, 0.95f, 0.0f));
+    stripe = glm::scale(stripe, glm::vec3(2.22f, 0.15f, 7.62f));
+    drawCube(shaderProgram, vao, stripe, maroonStripe);
+
+    // -------------------------------------------------------------
+    // 3. UPPER MAIN BODY (White cabin core)
+    // -------------------------------------------------------------
+    glm::mat4 upperBody = glm::translate(busMat, glm::vec3(0.0f, 1.85f, 0.0f));
+    upperBody = glm::scale(upperBody, glm::vec3(2.18f, 1.65f, 7.58f));
+    drawCube(shaderProgram, vao, upperBody, whiteBody);
+
+    // -------------------------------------------------------------
+    // 4. ROOF CAP SLAB
+    // -------------------------------------------------------------
+    glm::mat4 roof = glm::translate(busMat, glm::vec3(0.0f, 2.72f, 0.0f));
+    roof = glm::scale(roof, glm::vec3(2.22f, 0.12f, 7.62f));
+    drawCube(shaderProgram, vao, roof, whiteBody);
+
+    // -------------------------------------------------------------
+    // 5. SIDE WINDOW PANES (Segmented rows on Left & Right sides)
+    // -------------------------------------------------------------
+    const int NUM_WINDOWS = 6;
+    float windowStartZ = -2.7f;
+    float windowSpacingZ = 1.05f;
+
+    for (int i = 0; i < NUM_WINDOWS; i++) {
+        float winZ = windowStartZ + i * windowSpacingZ;
+
+        // Left Side Window
+        glm::mat4 winL = glm::translate(busMat, glm::vec3(-1.10f, 1.95f, winZ));
+        winL = glm::scale(winL, glm::vec3(0.05f, 0.85f, 0.85f));
+        drawCube(shaderProgram, vao, winL, windowGlass);
+
+        // Right Side Window
+        glm::mat4 winR = glm::translate(busMat, glm::vec3(1.10f, 1.95f, winZ));
+        winR = glm::scale(winR, glm::vec3(0.05f, 0.85f, 0.85f));
+        drawCube(shaderProgram, vao, winR, windowGlass);
+    }
+
+    // -------------------------------------------------------------
+    // 6. FRONT WINDSHIELD & REAR WINDOW
+    // -------------------------------------------------------------
+    // Front Windshield
+    glm::mat4 frontGlass = glm::translate(busMat, glm::vec3(0.0f, 2.05f, 3.80f));
+    frontGlass = glm::scale(frontGlass, glm::vec3(2.0f, 1.1f, 0.05f));
+    drawCube(shaderProgram, vao, frontGlass, windowGlass);
+
+    // Rear Window
+    glm::mat4 rearGlass = glm::translate(busMat, glm::vec3(0.0f, 2.05f, -3.80f));
+    rearGlass = glm::scale(rearGlass, glm::vec3(1.9f, 0.9f, 0.05f));
+    drawCube(shaderProgram, vao, rearGlass, windowGlass);
+
+    // -------------------------------------------------------------
+    // 7. FRONT FACADE DETAILS (Grille, Bumper, Lights)
+    // -------------------------------------------------------------
+    // Front Bumper (Maroon lower shield)
+    glm::mat4 frontBumper = glm::translate(busMat, glm::vec3(0.0f, 0.45f, 3.82f));
+    frontBumper = glm::scale(frontBumper, glm::vec3(2.2f, 0.5f, 0.08f));
+    drawCube(shaderProgram, vao, frontBumper, maroonSkirt);
+
+    // Front Chrome/Silver Grille
+    glm::mat4 grille = glm::translate(busMat, glm::vec3(0.0f, 0.85f, 3.83f));
+    grille = glm::scale(grille, glm::vec3(1.1f, 0.30f, 0.05f));
+    drawCube(shaderProgram, vao, grille, grilleColor);
+
+    // Headlights (Left & Right)
+    glm::mat4 headL = glm::translate(busMat, glm::vec3(-0.80f, 0.82f, 3.84f));
+    headL = glm::scale(headL, glm::vec3(0.30f, 0.20f, 0.05f));
+    drawCube(shaderProgram, vao, headL, headlightColor);
+
+    glm::mat4 headR = glm::translate(busMat, glm::vec3(0.80f, 0.82f, 3.84f));
+    headR = glm::scale(headR, glm::vec3(0.30f, 0.20f, 0.05f));
+    drawCube(shaderProgram, vao, headR, headlightColor);
+
+    // -------------------------------------------------------------
+    // 8. SIDE MIRRORS (Extending from front A-pillars)
+    // -------------------------------------------------------------
+    // Left Mirror
+    glm::mat4 mirrorArmL = glm::translate(busMat, glm::vec3(-1.25f, 2.05f, 3.5f));
+    mirrorArmL = glm::scale(mirrorArmL, glm::vec3(0.25f, 0.06f, 0.06f));
+    drawCube(shaderProgram, vao, mirrorArmL, mirrorColor);
+
+    glm::mat4 mirrorHeadL = glm::translate(busMat, glm::vec3(-1.38f, 1.95f, 3.5f));
+    mirrorHeadL = glm::scale(mirrorHeadL, glm::vec3(0.08f, 0.35f, 0.18f));
+    drawCube(shaderProgram, vao, mirrorHeadL, mirrorColor);
+
+    // Right Mirror
+    glm::mat4 mirrorArmR = glm::translate(busMat, glm::vec3(1.25f, 2.05f, 3.5f));
+    mirrorArmR = glm::scale(mirrorArmR, glm::vec3(0.25f, 0.06f, 0.06f));
+    drawCube(shaderProgram, vao, mirrorArmR, mirrorColor);
+
+    glm::mat4 mirrorHeadR = glm::translate(busMat, glm::vec3(1.38f, 1.95f, 3.5f));
+    mirrorHeadR = glm::scale(mirrorHeadR, glm::vec3(0.08f, 0.35f, 0.18f));
+    drawCube(shaderProgram, vao, mirrorHeadR, mirrorColor);
+
+    // -------------------------------------------------------------
+     // 9. ROUND ROTATING WHEELS
+     // -------------------------------------------------------------
+    float wX[] = { -1.08f, 1.08f, -1.08f, 1.08f };
+    float wZ[] = { 2.2f, 2.2f, -2.2f, -2.2f };
+    float wheelRadius = 0.3f;
+    float wheelWidth = 0.35f;
+
+    for (int i = 0; i < 4; i++) {
+        glm::mat4 wheelMat = busMat;
+        wheelMat = glm::translate(wheelMat, glm::vec3(wX[i], wheelRadius+0.35f, wZ[i]));
+        // Rotate around local X axis based on movement distance
+        wheelMat = glm::rotate(wheelMat, glm::radians(wheelRot), glm::vec3(1.0f, 0.0f, 0.0f));
+
+        draw3DWheel(shaderProgram, vao, wheelMat, wheelRadius, wheelWidth);
+    }
+}
+
+
 
 int main() {
     glfwInit();
@@ -504,22 +892,53 @@ int main() {
         drawTree(shaderProgram, VAO1, 16.0f, 31.0f);
 
         // Moving Car Animation
+        //float time = (float)glfwGetTime();
+        //float carSpeed = 8.0f;
+        //float roadLength = 50.0f;
+
+        //float cycle = fmod(time * carSpeed, roadLength * 2.0f);
+        //float carZ, dirZ;
+        //if (cycle < roadLength) {
+        //    carZ = -25.0f + cycle;
+        //    dirZ = 1.0f;
+        //}
+        //else {
+        //    carZ = 25.0f - (cycle - roadLength);
+        //    dirZ = -1.0f;
+        //}
+
+     //   drawCar(shaderProgram, VAO1, (dirZ > 0 ? 0.8f : -0.8f), carZ, dirZ);
+
+        //===========================================================================
+
+
+
+        // Vehicle Movement & Rolling Animation Logic
         float time = (float)glfwGetTime();
-        float carSpeed = 8.0f;
+        float speed = 8.0f;
         float roadLength = 50.0f;
 
-        float cycle = fmod(time * carSpeed, roadLength * 2.0f);
-        float carZ, dirZ;
+        float cycle = fmod(time * speed, roadLength * 2.0f);
+        float vehicleZ, dirZ;
         if (cycle < roadLength) {
-            carZ = -25.0f + cycle;
-            dirZ = 1.0f;
+            vehicleZ = -25.0f + cycle;
+            dirZ = 1.0f;   // Moving forward (+Z)
         }
         else {
-            carZ = 25.0f - (cycle - roadLength);
-            dirZ = -1.0f;
+            vehicleZ = 25.0f - (cycle - roadLength);
+            dirZ = -1.0f;  // Moving backward (-Z)
         }
 
-        drawCar(shaderProgram, VAO1, (dirZ > 0 ? 0.8f : -0.8f), carZ, dirZ);
+        // Calculate wheel rotation angles based on distance (θ = distance / radius)
+        float carWheelRot = glm::degrees(time * speed / 0.35f);
+        float busWheelRot = glm::degrees(time * speed / 0.48f);
+
+        // Draw Car (Left Lane) & Bus (Right Lane) driving together with spinning wheels
+        drawCar(shaderProgram, VAO1, (dirZ > 0 ? -1.2f : 1.2f), -vehicleZ, -dirZ, -carWheelRot);
+        drawBus(shaderProgram, VAO1, (dirZ > 0 ? 1.4f : -1.4f), vehicleZ, dirZ, busWheelRot);
+
+
+        //===============================================================================
 
         glfwSwapBuffers(window);
         glfwPollEvents();
