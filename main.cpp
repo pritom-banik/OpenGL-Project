@@ -19,7 +19,7 @@ const unsigned int height = 960;
 
 // Interactive Camera Parameters
 float cameraRadius = 45.0f;  // Zoom distance
-float yaw = -90.0f;          // Horizontal angle (degrees)
+float yaw = 90.0f;          // Horizontal angle (degrees)
 float pitch = 30.0f;         // Vertical angle (degrees)
 float lastX = width / 2.0f;
 float lastY = height / 2.0f;
@@ -337,6 +337,8 @@ void draw3DWheel(Shader& shaderProgram, VAO& vao, glm::mat4 wheelMat, float radi
 
 
 
+
+
 void drawBuildingExtension(Shader& shaderProgram, VAO& vao, float xOffset, float zOffset) {
     glm::vec3 pillarColor(0.90f, 0.90f, 0.88f);
     glm::vec3 balconyColor(0.75f, 0.65f, 0.55f);
@@ -381,44 +383,336 @@ void drawBuildingExtension(Shader& shaderProgram, VAO& vao, float xOffset, float
     }
 }
 
+void drawCorridor(Shader& shaderProgram, VAO& vao, float xOffset, float z1, float z2) {
+    glm::vec3 slabColor(0.88f, 0.82f, 0.72f);      // Tan/beige floor slab
+    glm::vec3 wallTan(0.78f, 0.68f, 0.58f);        // Parapet railing color
+    glm::vec3 pillarColor(0.92f, 0.90f, 0.86f);    // Off-white support columns
+    glm::vec3 railingColor(0.75f, 0.75f, 0.78f);   // Metallic silver handrail
+
+    float midZ = (z1 + z2) / 2.0f;
+    float gapLength = (z2 - z1) - 3.8f; // Fits tightly inside the 2.0 unit gap between blocks
+    float widthX = 2.6f;                // Walkway width in X
+
+    // 1. Structural Vertical Columns on Left and Right Sides of Skybridge
+    float leftColumnX = xOffset - (widthX / 2.0f) + 0.15f;
+    float rightColumnX = xOffset + (widthX / 2.0f) - 0.15f;
+
+  
+
+    // 2. Multi-Story Open Skybridges (Floors 1 through 4)
+    for (int floor = 0; floor <= 4; floor++) {
+        float yPos = floor * 1.3f;
+
+        // Walkway Floor Slab
+        glm::mat4 floorSlab = glm::mat4(1.0f);
+        floorSlab = glm::translate(floorSlab, glm::vec3(xOffset, yPos, midZ));
+        floorSlab = glm::scale(floorSlab, glm::vec3(widthX, 0.18f, gapLength));
+        drawCube(shaderProgram, vao, floorSlab, slabColor);
+
+        // Front Solid Parapet Wall (+X facing front edge)
+        glm::mat4 frontParapet = glm::mat4(1.0f);
+        frontParapet = glm::translate(frontParapet, glm::vec3(xOffset + (widthX / 2.0f) - 0.05f, yPos + 0.30f, midZ));
+        frontParapet = glm::scale(frontParapet, glm::vec3(0.10f, 0.45f, gapLength));
+        drawCube(shaderProgram, vao, frontParapet, wallTan);
+
+        // Back Solid Parapet Wall (-X facing back edge)
+        glm::mat4 backParapet = glm::mat4(1.0f);
+        backParapet = glm::translate(backParapet, glm::vec3(xOffset - (widthX / 2.0f) + 0.05f, yPos + 0.30f, midZ));
+        backParapet = glm::scale(backParapet, glm::vec3(0.10f, 0.45f, gapLength));
+        drawCube(shaderProgram, vao, backParapet, wallTan);
+
+        // Top Metallic Safety Handrail Trim
+        glm::mat4 frontRail = glm::mat4(1.0f);
+        frontRail = glm::translate(frontRail, glm::vec3(xOffset + (widthX / 2.0f) - 0.05f, yPos + 0.55f, midZ));
+        frontRail = glm::scale(frontRail, glm::vec3(0.06f, 0.08f, gapLength));
+        drawCube(shaderProgram, vao, frontRail, railingColor);
+
+        glm::mat4 backRail = glm::mat4(1.0f);
+        backRail = glm::translate(backRail, glm::vec3(xOffset - (widthX / 2.0f) + 0.05f, yPos + 0.55f, midZ));
+        backRail = glm::scale(backRail, glm::vec3(0.06f, 0.08f, gapLength));
+        drawCube(shaderProgram, vao, backRail, railingColor);
+    }
+
+    // Walkway Floor Slab
+    glm::mat4 floorSlab = glm::mat4(1.0f);
+    floorSlab = glm::translate(floorSlab, glm::vec3(xOffset, 6.5f, midZ));
+    floorSlab = glm::scale(floorSlab, glm::vec3(widthX, 0.1f, gapLength));
+    drawCube(shaderProgram, vao, floorSlab, slabColor);
+}
+
+
 
 
 void drawBuildingBlock(Shader& shaderProgram, VAO& vao, float xOffset, float zOffset) {
-    glm::vec3 mainColor(0.93f, 0.88f, 0.80f);
-    glm::vec3 balconyColor(0.75f, 0.65f, 0.55f);
+    glm::vec3 wallCream(0.94f, 0.92f, 0.88f);     // Light cream upper band
+    glm::vec3 wallTan(0.78f, 0.68f, 0.58f);       // Tan/beige lower band
+    glm::vec3 darkBase(0.25f, 0.22f, 0.20f);      // Plinth bottom accent
+    glm::vec3 windowGlass(0.18f, 0.18f, 0.22f);   // Dark recessed window glass
+    glm::vec3 balconyColor(0.82f, 0.74f, 0.64f);
 
-    // 1. Main Building Volume
-    glm::mat4 model = glm::mat4(1.0f);
-    model = glm::translate(model, glm::vec3(xOffset, 4.0f, zOffset));
-    model = glm::scale(model, glm::vec3(8.0f, 8.0f, 4.0f));
-    drawCube(shaderProgram, vao, model, mainColor);
+    // 1. Alternating Two-Tone Facade Layering (5 Floors)
+    for (int floor = 0; floor < 5; floor++) {
+        float floorY = 0.8f + floor * 1.3f;
 
-    // Balcony dimensions
-    float balconyOutwardRadius = 1.5f; // Extension along X-axis
-    float balconyHeight = 0.2f;        // Thickness in Y-axis
-    float balconyDepthRadius = 1.8f;   // Radius along Z-axis (fits within building depth 4.0)
+        // Lower Tan Wall Band
+        glm::mat4 tanBand = glm::mat4(1.0f);
+        tanBand = glm::translate(tanBand, glm::vec3(xOffset, floorY - 0.25f, zOffset));
+        tanBand = glm::scale(tanBand, glm::vec3(8.0f, 0.50f, 4.0f));
+        drawCube(shaderProgram, vao, tanBand, wallTan);
 
-    // 2. Horizontal Half-Oval Balconies (5 floors)
-    for (int i = 1; i <= 5; i++) {
+        // Upper Cream Wall Band
+        glm::mat4 creamBand = glm::mat4(1.0f);
+        creamBand = glm::translate(creamBand, glm::vec3(xOffset, floorY + 0.35f, zOffset));
+        creamBand = glm::scale(creamBand, glm::vec3(8.0f, 0.70f, 4.0f));
+        drawCube(shaderProgram, vao, creamBand, wallCream);
+
+        // Horizontal Ribbon Windows (Front & Back Faces)
+        for (int win = -3; win <= 3; win += 2) {
+            float winX = xOffset + win * 1.0f;
+
+            // +Z Face Window Strip
+            glm::mat4 winFront = glm::mat4(1.0f);
+            winFront = glm::translate(winFront, glm::vec3(winX, floorY + 0.35f, zOffset + 2.01f));
+            winFront = glm::scale(winFront, glm::vec3(1.4f, 0.35f, 0.04f));
+            drawCube(shaderProgram, vao, winFront, windowGlass);
+
+            // -Z Face Window Strip
+            glm::mat4 winBack = glm::mat4(1.0f);
+            winBack = glm::translate(winBack, glm::vec3(winX, floorY + 0.35f, zOffset - 2.01f));
+            winBack = glm::scale(winBack, glm::vec3(1.4f, 0.35f, 0.04f));
+            drawCube(shaderProgram, vao, winBack, windowGlass);
+        }
+
+        // Side Balcony Ledging
+        if (floor > 0) {
+            glm::mat4 sideBalcony = glm::mat4(1.0f);
+            sideBalcony = glm::translate(sideBalcony, glm::vec3(xOffset, floorY - 0.25f, zOffset));
+            sideBalcony = glm::scale(sideBalcony, glm::vec3(8.1f, 0.15f, 4.1f));
+            drawCube(shaderProgram, vao, sideBalcony, balconyColor);
+        }
+    }
+
+    // Dark Bottom Plinth Base
+    glm::mat4 base = glm::mat4(1.0f);
+    base = glm::translate(base, glm::vec3(xOffset, 0.25f, zOffset));
+    base = glm::scale(base, glm::vec3(8.05f, 0.50f, 4.05f));
+    drawCube(shaderProgram, vao, base, darkBase);
+
+    // Side Oval Balconies (+X and -X ends)
+    float balconyOutwardRadius = 1.5f;
+    float balconyHeight = 0.2f;
+    float balconyDepthRadius = 1.8f;
+
+    for (int i = 1; i <= 4; i++) {
         float yPos = i * 1.3f;
-
-
-        // Side horizontal balcony ledge running along the facade
-        glm::mat4 sideBalcony = glm::mat4(1.0f);
-        sideBalcony = glm::translate(sideBalcony, glm::vec3(xOffset, yPos, zOffset));
-        sideBalcony = glm::scale(sideBalcony, glm::vec3(8.0f, 0.18f, 4.1f));
-        drawCube(shaderProgram, vao, sideBalcony, balconyColor);
-
-
-
-        // +X Side (Right Face) Balcony facing +X (0 degrees rotation)
-        glm::vec3 posPlusX(xOffset + 3.0f, yPos, zOffset);
+        glm::vec3 posPlusX(xOffset + 3.0f, yPos+0.5f, zOffset);
         drawSemiOval(shaderProgram, balconyOutwardRadius, balconyHeight, balconyDepthRadius, posPlusX, 0.0f, balconyColor);
 
-        // -X Side (Left Face) Balcony facing -X (180 degrees rotation)
-        glm::vec3 posMinusX(xOffset - 3.0f, yPos, zOffset);
+        glm::vec3 posMinusX(xOffset - 3.0f, yPos + 0.5f, zOffset);
         drawSemiOval(shaderProgram, balconyOutwardRadius, balconyHeight, balconyDepthRadius, posMinusX, 180.0f, balconyColor);
     }
+
+    glm::vec3 doorColor(0.18f, 0.18f, 0.22f);
+
+    for (int i = 0; i <= 4; i++) {
+        float yPos = i * 1.3f + 0.5f;
+
+        // +X side door
+        glm::mat4 doorPlus = glm::mat4(1.0f);
+        doorPlus = glm::translate(
+            doorPlus,
+            glm::vec3(xOffset + 4.0f, yPos + 0.55f, zOffset)
+        );
+        doorPlus = glm::scale(
+            doorPlus,
+            glm::vec3(0.08f, 0.75f, 0.8f)
+        );
+        drawCube(shaderProgram, vao, doorPlus, doorColor);
+
+        // -X side door
+        glm::mat4 doorMinus = glm::mat4(1.0f);
+        doorMinus = glm::translate(
+            doorMinus,
+            glm::vec3(xOffset - 4.02f, yPos + 0.55f, zOffset)
+        );
+        doorMinus = glm::scale(
+            doorMinus,
+            glm::vec3(0.08f, 0.75f, 0.8f)
+        );
+        drawCube(shaderProgram, vao, doorMinus, doorColor);
+    }
+
+    for (int s = 0; s < 3; s++) {
+        float stepY = (s * 0.08f) + 0.04f;
+        float stepDepth = 0.30f + (3 - s) * 0.20f;
+        glm::mat4 stepMat = glm::translate(glm::mat4(1.0f), glm::vec3(xOffset-4.0f, 0.1f, zOffset));
+        stepMat = glm::scale(stepMat, glm::vec3(stepDepth, stepY, 2.4f + s * 0.2f));
+        drawCube(shaderProgram, vao, stepMat, glm::vec3(0.93f, 0.93f, 0.90f));
+
+
+
+        glm::mat4 stepMat2 = glm::translate(glm::mat4(1.0f), glm::vec3(xOffset + 4.0f, 0.1f, zOffset));
+        stepMat2 = glm::scale(stepMat2, glm::vec3(stepDepth, stepY, 2.4f + s * 0.2f));
+        drawCube(shaderProgram, vao, stepMat2, glm::vec3(0.93f, 0.93f, 0.90f));
+    }
+
+
+    // =============================================================
+// FRONT & BACK CENTER DOORS (+Z and -Z sides)
+// =============================================================
+
+    glm::vec3 entranceDoorColor(0.16f, 0.18f, 0.20f);
+
+    // Door dimensions
+    float doorWidth = 1.2f;
+    float doorHeight = 1.5f;
+
+    // -------------------------------------------------------------
+    // FRONT DOOR (+Z side)
+    // -------------------------------------------------------------
+    glm::mat4 frontDoor = glm::mat4(1.0f);
+
+    frontDoor = glm::translate(
+        frontDoor,
+        glm::vec3(
+            xOffset,
+            0.95f,
+            zOffset + 2.05f
+        )
+    );
+
+    frontDoor = glm::scale(
+        frontDoor,
+        glm::vec3(
+            doorWidth,
+            doorHeight,
+            0.08f
+        )
+    );
+
+    drawCube(
+        shaderProgram,
+        vao,
+        frontDoor,
+        entranceDoorColor
+    );
+
+
+    // -------------------------------------------------------------
+    // BACK DOOR (-Z side)
+    // -------------------------------------------------------------
+    glm::mat4 backDoor = glm::mat4(1.0f);
+
+    backDoor = glm::translate(
+        backDoor,
+        glm::vec3(
+            xOffset,
+            0.95f,
+            zOffset - 2.05f
+        )
+    );
+
+    backDoor = glm::scale(
+        backDoor,
+        glm::vec3(
+            doorWidth,
+            doorHeight,
+            0.08f
+        )
+    );
+
+    drawCube(
+        shaderProgram,
+        vao,
+        backDoor,
+        entranceDoorColor
+    );
+
+
+    // =============================================================
+// FRONT & BACK ENTRANCE STAIRS
+// =============================================================
+
+    glm::vec3 stairColor(0.88f, 0.88f, 0.84f);
+
+    int numSteps = 4;
+
+    float stepHeight = 0.12f;
+    float stepWidth = 1.8f;
+    float stepDepth = 0.45f;
+
+    // =============================================================
+    // FRONT STAIRS (+Z)
+    // =============================================================
+
+    for (int s = 0; s < numSteps; s++) {
+
+        float y = 0.25f - s * stepHeight;
+
+        // Each higher step moves closer to the building
+        float z = zOffset + 2.25f + s * stepDepth;
+
+        glm::mat4 step = glm::mat4(1.0f);
+
+        step = glm::translate(
+            step,
+            glm::vec3(
+                xOffset,
+                y,
+                -z
+            )
+        );
+
+        step = glm::scale(
+            step,
+            glm::vec3(
+                stepWidth,
+                stepHeight,
+                stepDepth
+            )
+        );
+
+        drawCube(
+            shaderProgram,
+            vao,
+            step,
+            stairColor
+        );
+    }
+
+
+    // =============================================================
+    // BACK STAIRS (-Z)
+    // =============================================================
+
+    for (int s = 0; s < numSteps; s++) {
+
+        float y = 0.12f - s * stepHeight;
+
+        // Move steps toward the -Z direction
+        float z = zOffset - 2.25f - s * stepDepth;
+
+        glm::mat4 step = glm::mat4(1.0f);
+
+        step = glm::translate(
+            step,
+            glm::vec3(
+                xOffset,
+                y,
+                -z
+            )
+        );
+
+        step = glm::scale(
+            step,
+            glm::vec3(stepWidth,stepHeight,stepDepth)
+        );
+
+        drawCube(shaderProgram,vao,step,stairColor);
+    }
+
+
+
 }
 
 void drawFourConnectedBlocks(Shader& shaderProgram, VAO& vao, float xOffset) {
@@ -429,46 +723,543 @@ void drawFourConnectedBlocks(Shader& shaderProgram, VAO& vao, float xOffset) {
         drawBuildingBlock(shaderProgram, vao, xOffset, zPositions[i]);
 
         if (i < 3) {
-            float midZ = (zPositions[i] + zPositions[i + 1]) / 2.0f;
-
-            glm::mat4 connModel = glm::mat4(1.0f);
-            connModel = glm::translate(connModel, glm::vec3(xOffset, 3.0f, midZ));
-            connModel = glm::scale(connModel, glm::vec3(2.0f, 8.0f, 8.0f));
-            drawCube(shaderProgram, vao, connModel, corridorColor);
+            drawCorridor(shaderProgram, vao, xOffset, zPositions[i], zPositions[i + 1]);
         }
     }
 
     drawBuildingExtension(shaderProgram, vao, xOffset, zPositions[3]);
 }
 
-void drawCourtyardBuilding(Shader& shader, VAO& vao, float x, float z, float w, float d, float h, float wallThick, glm::vec3 color) {
-    glm::mat4 m1 = glm::translate(glm::mat4(1.0f), glm::vec3(x, h / 2.0f, z - d / 2.0f + wallThick / 2.0f));
-    m1 = glm::scale(m1, glm::vec3(w, h, wallThick));
-    drawCube(shader, vao, m1, color);
+void drawFFHDRH(Shader& shader, VAO& vao, float x, float z, float w, float d, float h, float wallThick, glm::vec3 color) {
+    // Architectural Color Palette
+    glm::vec3 pinkWall(0.88f, 0.68f, 0.72f);      // Main facade plaster
+    glm::vec3 whiteTrim(0.93f, 0.93f, 0.90f);     // Concrete pillars, ledges & parapets
+    glm::vec3 darkBase(0.25f, 0.22f, 0.20f);      // Plinth ground base
+    glm::vec3 windowGlass(0.18f, 0.22f, 0.28f);   // Dark recessed window glass
+    glm::vec3 doorColor(0.12f, 0.12f, 0.14f);     // Entrance doorway frame
 
-    glm::mat4 m2 = glm::translate(glm::mat4(1.0f), glm::vec3(x, h / 2.0f, z + d / 2.0f - wallThick / 2.0f));
-    m2 = glm::scale(m2, glm::vec3(w, h, wallThick));
-    drawCube(shader, vao, m2, color);
+    float h1 = h / 3.0f; // Height of 1-story section
 
-    glm::mat4 m3 = glm::translate(glm::mat4(1.0f), glm::vec3(x - w / 2.0f + wallThick / 2.0f, h / 2.0f, z));
-    m3 = glm::scale(m3, glm::vec3(wallThick, h, d - 2.0f * wallThick));
-    drawCube(shader, vao, m3, color);
+    // Wall Center Coordinates
+    float northZ = z - d / 2.0f + wallThick / 2.0f; // North Wall (-Z)
+    float southZ = z + d / 2.0f - wallThick / 2.0f; // South Wall (+Z)
+    float westX = x - w / 2.0f + wallThick / 2.0f; // West Wall (-X)
+    float eastX = x + w / 2.0f - wallThick / 2.0f; // East Wall (+X)
 
-    glm::mat4 m4 = glm::translate(glm::mat4(1.0f), glm::vec3(x + w / 2.0f - wallThick / 2.0f, h / 2.0f, z));
-    m4 = glm::scale(m4, glm::vec3(wallThick, h, d - 2.0f * wallThick));
-    drawCube(shader, vao, m4, color);
+    float sideWingDepth = d - 2.0f * wallThick;
+
+    // =========================================================================
+    // 1. SOUTH WING (1-STORY FRONT WALL)
+    // =========================================================================
+    float entryWidth = wallThick; // Reserve space for SE entry point
+    float southWallWidth = w - entryWidth;
+    float southWallCenterX = x - entryWidth / 2.0f;
+
+    // 1-Story South Wall Body
+    glm::mat4 southWing = glm::translate(glm::mat4(1.0f), glm::vec3(southWallCenterX, h1 / 2.0f, southZ));
+    southWing = glm::scale(southWing, glm::vec3(southWallWidth, h1, wallThick));
+    drawCube(shader, vao, southWing, pinkWall);
+
+    // South Wing Plinth Base
+    glm::mat4 baseS = glm::translate(glm::mat4(1.0f), glm::vec3(southWallCenterX, 0.15f, southZ));
+    baseS = glm::scale(baseS, glm::vec3(southWallWidth + 0.05f, 0.30f, wallThick + 0.05f));
+    drawCube(shader, vao, baseS, darkBase);
+
+    // South Wing Parapet Cap
+    glm::mat4 roofS1 = glm::translate(glm::mat4(1.0f), glm::vec3(southWallCenterX, h1 + 0.10f, southZ));
+    roofS1 = glm::scale(roofS1, glm::vec3(southWallWidth, 0.20f, wallThick + 0.08f));
+    drawCube(shader, vao, roofS1, whiteTrim);
+
+    // Ground Floor Windows on 1-Story South Wall
+    int numSouthWins = 3;
+    float stepSouthWin = southWallWidth / (float)(numSouthWins + 1);
+    for (int i = 1; i <= numSouthWins; i++) {
+        float winX = (southWallCenterX - southWallWidth / 2.0f) + i * stepSouthWin;
+        glm::mat4 win = glm::translate(glm::mat4(1.0f), glm::vec3(winX, h1 * 0.55f, southZ + wallThick / 2.0f + 0.02f));
+        win = glm::scale(win, glm::vec3(stepSouthWin * 0.45f, h1 * 0.40f, 0.05f));
+        drawCube(shader, vao, win, windowGlass);
+    }
+
+    // =========================================================================
+    // 2. ENTRY POINT (FACING EAST (+X) AT SOUTH-EAST CORNER WITH STAIRS)
+    // =========================================================================
+    // 2. ENTRY POINT (FACING EAST (+X) AT SOUTH-EAST CORNER WITH STAIRS)
+    float entryLengthZ = wallThick ;        // Entry width along Z-axis
+    float entryZ = southZ;                        // South-East corner position
+    float outerEastX = eastX- wallThick / 2.0f;  // Outer face of East wall
+
+    // Entrance Door Canopy
+    glm::mat4 canopy = glm::translate(glm::mat4(1.0f), glm::vec3(outerEastX, h1 * 0.85f, entryZ));
+    canopy = glm::scale(canopy, glm::vec3(0.70f, 0.15f, entryLengthZ * 0.90f));
+    drawCube(shader, vao, canopy, whiteTrim);
+
+    // Entrance Doorway Opening Frame
+    glm::mat4 doorMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerEastX, h1 * 0.40f, entryZ));
+    doorMat = glm::scale(doorMat, glm::vec3(0.06f, h1 * 0.70f, entryLengthZ * 0.70f));
+    drawCube(shader, vao, doorMat, doorColor);
+
+    // Multi-Step Entrance Stairs
+    int numSteps = 5;
+    for (int s = 0; s < numSteps; s++) {
+        float stepY = (s * 0.06f) + 0.03f;
+        float stepDepth = 0.25f + (numSteps - s) * 0.15f;
+        glm::mat4 stepMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerEastX + stepDepth / 2.0f, stepY, entryZ));
+        stepMat = glm::scale(stepMat, glm::vec3(stepDepth, 0.06f, entryLengthZ * 0.85f));
+        drawCube(shader, vao, stepMat, whiteTrim);
+    }
+
+
+
+    // =========================================================================
+    // 3. MAIN WINGS (3-STORY WEST & EAST, 1-STORY NORTH)
+    // =========================================================================
+    // West Wing (-X) - 3 Stories
+    glm::mat4 westWing = glm::translate(glm::mat4(1.0f), glm::vec3(westX, h / 2.0f, z));
+    westWing = glm::scale(westWing, glm::vec3(wallThick, h, sideWingDepth + 2.0f * wallThick));
+    drawCube(shader, vao, westWing, pinkWall);
+
+    // East Wing (+X) - 3 Stories
+    glm::mat4 eastWing = glm::translate(glm::mat4(1.0f), glm::vec3(eastX, h / 2.0f, z - wallThick / 2.0f));
+    eastWing = glm::scale(eastWing, glm::vec3(wallThick, h, sideWingDepth + wallThick));
+    drawCube(shader, vao, eastWing, pinkWall);
+
+    // North Wing (-Z) - 1 Story
+    glm::mat4 northWing = glm::translate(glm::mat4(1.0f), glm::vec3(x-wallThick/2.0f, h1 / 2.0f, northZ-wallThick/2.0f));
+    northWing = glm::scale(northWing, glm::vec3(w - wallThick, h1, wallThick+wallThick));
+    drawCube(shader, vao, northWing, pinkWall);
+
+    // Plinth Bases
+    glm::mat4 baseW = glm::translate(glm::mat4(1.0f), glm::vec3(westX, 0.15f, z));
+    baseW = glm::scale(baseW, glm::vec3(wallThick + 0.05f, 0.30f, sideWingDepth + 2.0f * wallThick));
+    drawCube(shader, vao, baseW, darkBase);
+
+    glm::mat4 baseE = glm::translate(glm::mat4(1.0f), glm::vec3(eastX, 0.15f, z - wallThick / 2.0f));
+    baseE = glm::scale(baseE, glm::vec3(wallThick + 0.05f, 0.30f, sideWingDepth + wallThick));
+    drawCube(shader, vao, baseE, darkBase);
+
+    glm::mat4 baseN = glm::translate(glm::mat4(1.0f), glm::vec3(x - wallThick / 2.0f, 0.15f, northZ - wallThick / 2.0f));
+    baseN = glm::scale(baseN, glm::vec3(w - wallThick + 0.05f, 0.30f, wallThick + wallThick + 0.05f));
+    drawCube(shader, vao, baseN, darkBase);
+
+    // Roof Top Parapet Caps
+    glm::mat4 roofW = glm::translate(glm::mat4(1.0f), glm::vec3(westX, h + 0.10f, z));
+    roofW = glm::scale(roofW, glm::vec3(wallThick + 0.10f, 0.20f, sideWingDepth + 2.0f * wallThick + 0.10f));
+    drawCube(shader, vao, roofW, whiteTrim);
+
+    glm::mat4 roofE = glm::translate(glm::mat4(1.0f), glm::vec3(eastX, h + 0.10f, z - wallThick / 2.0f));
+    roofE = glm::scale(roofE, glm::vec3(wallThick + 0.10f, 0.20f, sideWingDepth + wallThick + 0.10f));
+    drawCube(shader, vao, roofE, whiteTrim);
+
+    glm::mat4 roofN = glm::translate(glm::mat4(1.0f), glm::vec3(x - wallThick / 2.0f, h1 + 0.10f, northZ - wallThick / 2.0f));
+    roofN = glm::scale(roofN, glm::vec3(w - wallThick, 0.20f, wallThick + wallThick + 0.10f));
+    drawCube(shader, vao, roofN, whiteTrim);
+
+    // =========================================================================
+    // 4. FACADE DETAILS (LEDGES, WINDOWS & 1-STORY NORTH PILLARS)
+    // =========================================================================
+    // Horizontal Concrete Ledges for 3-Story West & East Wings
+    for (int floor = 1; floor <= 3; floor++) {
+        float ledgeY = floor * h1;
+
+        // West Outer Ledge
+        glm::mat4 lW = glm::translate(glm::mat4(1.0f), glm::vec3(westX - wallThick / 2.0f - 0.02f, ledgeY, z));
+        lW = glm::scale(lW, glm::vec3(0.08f, 0.12f, sideWingDepth + 2.0f * wallThick));
+        drawCube(shader, vao, lW, whiteTrim);
+
+        // East Outer Ledge
+        glm::mat4 lE = glm::translate(glm::mat4(1.0f), glm::vec3(eastX + wallThick / 2.0f + 0.02f, ledgeY, z - wallThick / 2.0f));
+        lE = glm::scale(lE, glm::vec3(0.08f, 0.12f, sideWingDepth + wallThick));
+        drawCube(shader, vao, lE, whiteTrim);
+    }
+
+    // North Inner Ledge at 1-Story Roof Height
+    glm::mat4 lN = glm::translate(glm::mat4(1.0f), glm::vec3(x, h1, northZ + wallThick / 2.0f + 0.02f));
+    lN = glm::scale(lN, glm::vec3(w - 2.0f * wallThick, 0.12f, 0.08f));
+    drawCube(shader, vao, lN, whiteTrim);
+
+    // Stacked Windows on 3-Story West & East South-Facing Front Ends
+    for (int f = 0; f < 3; f++) {
+        float winY = (f * h1) + (h1 * 0.55f);
+
+        // West Wing South End Window
+        glm::mat4 winW = glm::translate(glm::mat4(1.0f), glm::vec3(westX, winY, southZ + wallThick / 2.0f + 0.02f));
+        winW = glm::scale(winW, glm::vec3(wallThick * 0.60f, h1 * 0.40f, 0.05f));
+        drawCube(shader, vao, winW, windowGlass);
+
+       
+    }
+
+    // 1-Story Vertical Structural Accent Pillars on North Courtyard Wall
+    float colOffsetsX[2] = { x - w * 0.20f, x + w * 0.20f };
+    for (int c = 0; c < 2; c++) {
+        glm::mat4 colMat = glm::translate(glm::mat4(1.0f), glm::vec3(colOffsetsX[c], h1 / 2.0f, northZ + wallThick / 2.0f + 0.04f));
+        colMat = glm::scale(colMat, glm::vec3(0.25f, h1, 0.08f));
+        drawCube(shader, vao, colMat, whiteTrim);
+    }
+
+    // Ground Floor Windows on 1-Story North Wall
+    float winY_North = h1 * 0.55f;
+    glm::mat4 winN1 = glm::translate(glm::mat4(1.0f), glm::vec3(x, winY_North, northZ + wallThick / 2.0f + 0.02f));
+    winN1 = glm::scale(winN1, glm::vec3(5.0f, h1 * 0.50f, 0.05f));
+    drawCube(shader, vao, winN1, windowGlass);
+
+   
+
+
+    // =========================================================================
+    // EXTERNAL WINDOW GRID (OUTER FACADES)
+    // =========================================================================
+    int baysZ = 6;
+    float stepZ = sideWingDepth / (float)baysZ;
+
+    // --- Outer West Wall (-X) Windows (3 Floors) ---
+    float outerWestX = westX - wallThick / 2.0f - 0.02f;
+    for (int floor = 0; floor < 3; floor++) {
+        float winY = (floor * h1) + (h1 * 0.55f);
+        for (int b = 0; b < baysZ; b++) {
+            float winZ = (z - sideWingDepth / 2.0f + stepZ / 2.0f) + b * stepZ;
+            glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerWestX, winY, winZ));
+            winMat = glm::scale(winMat, glm::vec3(0.05f, h1 * 0.40f, stepZ * 0.55f));
+            drawCube(shader, vao, winMat, windowGlass);
+        }
+    }
+
+    // --- Outer East Wall (+X) Windows (3 Floors) ---
+    float outerEastX_Wall = eastX + wallThick / 2.0f + 0.02f;
+    for (int floor = 0; floor < 3; floor++) {
+        float winY = (floor * h1) + (h1 * 0.55f);
+        for (int b = 0; b < baysZ; b++) {
+            float winZ = (z - sideWingDepth / 2.0f + stepZ / 2.0f) + b * stepZ;
+            glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerEastX_Wall, winY, winZ));
+            winMat = glm::scale(winMat, glm::vec3(0.05f, h1 * 0.40f, stepZ * 0.55f));
+            drawCube(shader, vao, winMat, windowGlass);
+        }
+    }
+
+    // --- Outer North Wall (-Z) Windows (Ground Floor) ---
+    float outerNorthZ = northZ - wallThick / 2.0f - 0.02f;
+    int baysX = 6;
+    float stepX = (w - 2.0f * wallThick) / (float)baysX;
+    float winY_Ground = h1 * 0.55f;
+    for (int b = 0; b < baysX; b++) {
+        float winX = (x - (w - 2.0f * wallThick) / 2.0f + stepX / 2.0f) + b * stepX;
+        glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(winX, winY_Ground, outerNorthZ-wallThick));
+        winMat = glm::scale(winMat, glm::vec3(stepX * 0.55f, h1 * 0.40f, 0.05f));
+        drawCube(shader, vao, winMat, windowGlass);
+    }
+
+
+
+    // =========================================================================
+    // INNER COURTYARD PILLARS & WINDOWS (WEST & EAST INNER WALLS)
+    // =========================================================================
+    float innerWestX = westX + wallThick / 2.0f + 0.02f; // Inner face of West wall
+    float innerEastX = eastX - wallThick / 2.0f - 0.02f; // Inner face of East wall
+
+    // Z-positions for pillars flanking the window ends
+    float colOffsetsZ[4] = { z - sideWingDepth * 0.40f, z + sideWingDepth * 0.40f, z - sideWingDepth * 0.10f, z + sideWingDepth * 0.10f };
+
+    // -------------------------------------------------------------------------
+    // 1. WEST INNER WALL (-X side, facing courtyard)
+    // -------------------------------------------------------------------------
+    // 3-Story Vertical Structural Pillars
+    for (int c = 0; c < 4; c++) {
+        glm::mat4 colMat = glm::translate(glm::mat4(1.0f), glm::vec3(innerWestX + 0.02f, h / 2.0f, colOffsetsZ[c]));
+        colMat = glm::scale(colMat, glm::vec3(0.08f, h, 0.1f));
+        drawCube(shader, vao, colMat, whiteTrim);
+    }
+
+    // 3-Floor Windows (Framed between the pillars)
+    for (int f = 0; f < 3; f++) {
+        float winY = (f * h1) + (h1 * 0.55f);
+        glm::mat4 winWestInner = glm::translate(glm::mat4(1.0f), glm::vec3(innerWestX, winY, z));
+        winWestInner = glm::scale(winWestInner, glm::vec3(0.05f, h1 * 0.50f, sideWingDepth+1.5f ));
+        drawCube(shader, vao, winWestInner, windowGlass);
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. EAST INNER WALL (+X side, facing courtyard)
+    // -------------------------------------------------------------------------
+    // 3-Story Vertical Structural Pillars
+    for (int c = 0; c < 4; c++) {
+        glm::mat4 colMat = glm::translate(glm::mat4(1.0f), glm::vec3(innerEastX - 0.02f, h / 2.0f, colOffsetsZ[c]));
+        colMat = glm::scale(colMat, glm::vec3(0.08f, h, 0.1f));
+        drawCube(shader, vao, colMat, whiteTrim);
+    }
+
+    // 3-Floor Windows (Framed between the pillars)
+    for (int f = 0; f < 3; f++) {
+        float winY = (f * h1) + (h1 * 0.55f);
+        glm::mat4 winEastInner = glm::translate(glm::mat4(1.0f), glm::vec3(innerEastX, winY, z));
+        winEastInner = glm::scale(winEastInner, glm::vec3(0.05f, h1 * 0.50f, sideWingDepth ));
+        drawCube(shader, vao, winEastInner, windowGlass);
+    }
+
 }
 
+
+
+void drawSSHAKH(Shader& shader, VAO& vao, float x, float z, float w, float d, float h, float wallThick, glm::vec3 color) {
+    // Architectural Color Palette
+    glm::vec3 pinkWall(0.88f, 0.68f, 0.72f);      // Main facade plaster
+    glm::vec3 whiteTrim(0.93f, 0.93f, 0.90f);     // Concrete pillars, ledges & parapets
+    glm::vec3 darkBase(0.25f, 0.22f, 0.20f);      // Plinth ground base
+    glm::vec3 windowGlass(0.18f, 0.22f, 0.28f);   // Dark recessed window glass
+    glm::vec3 doorColor(0.12f, 0.12f, 0.14f);     // Entrance doorway frame
+
+    float h1 = h / 5.0f; // Height of 1-story section
+
+    // Wall Center Coordinates
+    float northZ = z - d / 2.0f + wallThick / 2.0f; // North Wall (-Z)
+    float southZ = z + d / 2.0f - wallThick / 2.0f; // South Wall (+Z)
+    float westX = x - w / 2.0f + wallThick / 2.0f; // West Wall (-X)
+    float eastX = x + w / 2.0f - wallThick / 2.0f; // East Wall (+X)
+
+    float sideWingDepth = d - 2.0f * wallThick;
+    float wingWidth = w - 2.0f * wallThick;
+
+    // =========================================================================
+    // 1. ALL 4 MAIN WINGS (5 STORIES FULL HEIGHT)
+    // =========================================================================
+    // West Wing (-X) - 5 Stories
+    glm::mat4 westWing = glm::translate(glm::mat4(1.0f), glm::vec3(westX, h / 2.0f, z));
+    westWing = glm::scale(westWing, glm::vec3(wallThick, h, d));
+    drawCube(shader, vao, westWing, pinkWall);
+
+    // East Wing (+X) - 5 Stories
+    glm::mat4 eastWing = glm::translate(glm::mat4(1.0f), glm::vec3(eastX, h / 2.0f, z));
+    eastWing = glm::scale(eastWing, glm::vec3(wallThick, h, d));
+    drawCube(shader, vao, eastWing, pinkWall);
+
+    // North Wing (-Z) - 5 Stories
+    glm::mat4 northWing = glm::translate(glm::mat4(1.0f), glm::vec3(x, h / 2.0f, northZ));
+    northWing = glm::scale(northWing, glm::vec3(wingWidth, h, wallThick));
+    drawCube(shader, vao, northWing, pinkWall);
+
+    // South Wing (+Z) - 5 Stories
+    glm::mat4 southWing = glm::translate(glm::mat4(1.0f), glm::vec3(x, h / 2.0f, southZ));
+    southWing = glm::scale(southWing, glm::vec3(wingWidth, h, wallThick));
+    drawCube(shader, vao, southWing, pinkWall);
+
+    // -------------------------------------------------------------------------
+    // Plinth Bases (All 4 Wings)
+    // -------------------------------------------------------------------------
+    glm::mat4 baseW = glm::translate(glm::mat4(1.0f), glm::vec3(westX, 0.15f, z));
+    baseW = glm::scale(baseW, glm::vec3(wallThick + 0.05f, 0.30f, d + 0.05f));
+    drawCube(shader, vao, baseW, darkBase);
+
+    glm::mat4 baseE = glm::translate(glm::mat4(1.0f), glm::vec3(eastX, 0.15f, z));
+    baseE = glm::scale(baseE, glm::vec3(wallThick + 0.05f, 0.30f, d + 0.05f));
+    drawCube(shader, vao, baseE, darkBase);
+
+    glm::mat4 baseN = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.15f, northZ));
+    baseN = glm::scale(baseN, glm::vec3(wingWidth + 0.05f, 0.30f, wallThick + 0.05f));
+    drawCube(shader, vao, baseN, darkBase);
+
+    glm::mat4 baseS = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.15f, southZ));
+    baseS = glm::scale(baseS, glm::vec3(wingWidth + 0.05f, 0.30f, wallThick + 0.05f));
+    drawCube(shader, vao, baseS, darkBase);
+
+    // -------------------------------------------------------------------------
+    // Roof Parapet Caps (All 4 Wings at h)
+    // -------------------------------------------------------------------------
+    glm::mat4 roofW = glm::translate(glm::mat4(1.0f), glm::vec3(westX, h + 0.10f, z));
+    roofW = glm::scale(roofW, glm::vec3(wallThick + 0.10f, 0.20f, d + 0.10f));
+    drawCube(shader, vao, roofW, whiteTrim);
+
+    glm::mat4 roofE = glm::translate(glm::mat4(1.0f), glm::vec3(eastX, h + 0.10f, z));
+    roofE = glm::scale(roofE, glm::vec3(wallThick + 0.10f, 0.20f, d + 0.10f));
+    drawCube(shader, vao, roofE, whiteTrim);
+
+    glm::mat4 roofN = glm::translate(glm::mat4(1.0f), glm::vec3(x, h + 0.10f, northZ));
+    roofN = glm::scale(roofN, glm::vec3(wingWidth + 0.10f, 0.20f, wallThick + 0.10f));
+    drawCube(shader, vao, roofN, whiteTrim);
+
+    glm::mat4 roofS = glm::translate(glm::mat4(1.0f), glm::vec3(x, h + 0.10f, southZ));
+    roofS = glm::scale(roofS, glm::vec3(wingWidth + 0.10f, 0.20f, wallThick + 0.10f));
+    drawCube(shader, vao, roofS, whiteTrim);
+
+    // =========================================================================
+    // 2. MIDDLE ENTRANCE (MIDDLE OUTER PART OF EAST WALL +X)
+    // =========================================================================
+    float entryLengthZ = wallThick * 2.5f;       // Entrance width along Z
+    float outerEastX = eastX + wallThick / 2.0f; // Outer face of East wall
+
+    // Entrance Canopy Portico (Center of East Wall)
+    glm::mat4 canopy = glm::translate(glm::mat4(1.0f), glm::vec3(outerEastX + 0.35f, h1 * 0.85f, z));
+    canopy = glm::scale(canopy, glm::vec3(0.80f, 0.15f, entryLengthZ));
+    drawCube(shader, vao, canopy, whiteTrim);
+
+    // Entrance Doorway Frame
+    glm::mat4 doorMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerEastX + 0.01f, h1 * 0.40f, z));
+    doorMat = glm::scale(doorMat, glm::vec3(0.06f, h1 * 0.70f, entryLengthZ * 0.70f));
+    drawCube(shader, vao, doorMat, doorColor);
+
+    // Multi-Step Entrance Stairs (Facing +X)
+    int numSteps = 5;
+    for (int s = 0; s < numSteps; s++) {
+        float stepY = (s * 0.06f) + 0.03f;
+        float stepDepth = 0.25f + (numSteps - s) * 0.15f;
+        glm::mat4 stepMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerEastX + stepDepth / 2.0f, stepY, z));
+        stepMat = glm::scale(stepMat, glm::vec3(stepDepth, 0.06f, entryLengthZ * 0.90f));
+        drawCube(shader, vao, stepMat, whiteTrim);
+    }
+
+    // =========================================================================
+    // 3. FACADE LEDGES & EXTERNAL WINDOWS (ALL 5 FLOORS)
+    // =========================================================================
+    // Horizontal Ledges for 5 Floors
+    for (int floor = 1; floor <= 5; floor++) {
+        float ledgeY = floor * h1;
+
+        // West Outer Ledge
+        glm::mat4 lW = glm::translate(glm::mat4(1.0f), glm::vec3(westX - wallThick / 2.0f - 0.02f, ledgeY, z));
+        lW = glm::scale(lW, glm::vec3(0.08f, 0.12f, d));
+        drawCube(shader, vao, lW, whiteTrim);
+
+        // East Outer Ledge
+        glm::mat4 lE = glm::translate(glm::mat4(1.0f), glm::vec3(eastX + wallThick / 2.0f + 0.02f, ledgeY, z));
+        lE = glm::scale(lE, glm::vec3(0.08f, 0.12f, d));
+        drawCube(shader, vao, lE, whiteTrim);
+
+        // North Outer Ledge
+        glm::mat4 lN = glm::translate(glm::mat4(1.0f), glm::vec3(x, ledgeY, northZ - wallThick / 2.0f - 0.02f));
+        lN = glm::scale(lN, glm::vec3(w, 0.12f, 0.08f));
+        drawCube(shader, vao, lN, whiteTrim);
+
+        // South Outer Ledge
+        glm::mat4 lS = glm::translate(glm::mat4(1.0f), glm::vec3(x, ledgeY, southZ + wallThick / 2.0f + 0.02f));
+        lS = glm::scale(lS, glm::vec3(w, 0.12f, 0.08f));
+        drawCube(shader, vao, lS, whiteTrim);
+    }
+
+    // -------------------------------------------------------------------------
+    // Outer Windows (3 Floors for North, South, West & East)
+    // -------------------------------------------------------------------------
+    int baysZ = 6;
+    float stepZ = sideWingDepth / (float)baysZ;
+
+    int baysX = 6;
+    float stepX = wingWidth / (float)baysX;
+
+    for (int floor = 0; floor < 5; floor++) {
+        float winY = (floor * h1) + (h1 * 0.55f);
+
+        // Outer West Wall (-X) Windows
+        float outerWestX = westX - wallThick / 2.0f - 0.02f;
+        for (int b = 0; b < baysZ; b++) {
+            float winZ = (z - sideWingDepth / 2.0f + stepZ / 2.0f) + b * stepZ;
+            glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerWestX, winY, winZ));
+            winMat = glm::scale(winMat, glm::vec3(0.05f, h1 * 0.40f, stepZ * 0.55f));
+            drawCube(shader, vao, winMat, windowGlass);
+        }
+
+        // Outer East Wall (+X) Windows (Skipping middle bay for door)
+        float outerEastX_Wall = eastX + wallThick / 2.0f + 0.02f;
+        for (int b = 0; b < baysZ; b++) {
+            float winZ = (z - sideWingDepth / 2.0f + stepZ / 2.0f) + b * stepZ;
+            if (std::abs(winZ - z) > entryLengthZ * 0.6f || floor > 0) { // Keep windows on upper floors or away from entrance
+                glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerEastX_Wall, winY, winZ));
+                winMat = glm::scale(winMat, glm::vec3(0.05f, h1 * 0.40f, stepZ * 0.55f));
+                drawCube(shader, vao, winMat, windowGlass);
+            }
+        }
+
+        // Outer North Wall (-Z) Windows
+        float outerNorthZ = northZ - wallThick / 2.0f - 0.02f;
+        for (int b = 0; b < baysX; b++) {
+            float winX = (x - wingWidth / 2.0f + stepX / 2.0f) + b * stepX;
+            glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(winX, winY, outerNorthZ));
+            winMat = glm::scale(winMat, glm::vec3(stepX * 0.55f, h1 * 0.40f, 0.05f));
+            drawCube(shader, vao, winMat, windowGlass);
+        }
+
+        // Outer South Wall (+Z) Windows
+        float outerSouthZ = southZ + wallThick / 2.0f + 0.02f;
+        for (int b = 0; b < baysX; b++) {
+            float winX = (x - wingWidth / 2.0f + stepX / 2.0f) + b * stepX;
+            glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(winX, winY, outerSouthZ));
+            winMat = glm::scale(winMat, glm::vec3(stepX * 0.55f, h1 * 0.40f, 0.05f));
+            drawCube(shader, vao, winMat, windowGlass);
+        }
+    }
+
+    // =========================================================================
+    // 4. INNER COURTYARD PILLARS & WINDOWS (ALL 4 WINGS)
+    // =========================================================================
+    float innerWestX = westX + wallThick / 2.0f + 0.02f;
+    float innerEastX = eastX - wallThick / 2.0f - 0.02f;
+    float innerNorthZ = northZ + wallThick / 2.0f + 0.02f;
+    float innerSouthZ = southZ - wallThick / 2.0f - 0.02f;
+
+    float colOffsetsZ[4] = { z - sideWingDepth * 0.35f, z - sideWingDepth * 0.12f, z + sideWingDepth * 0.12f, z + sideWingDepth * 0.35f };
+    float colOffsetsX[4] = { x - wingWidth * 0.35f,     x - wingWidth * 0.12f,     x + wingWidth * 0.12f,     x + wingWidth * 0.35f };
+
+    // --- West Inner Wall ---
+    for (int c = 0; c < 5; c++) {
+        glm::mat4 colMat = glm::translate(glm::mat4(1.0f), glm::vec3(innerWestX + 0.02f, h / 2.0f, colOffsetsZ[c]));
+        colMat = glm::scale(colMat, glm::vec3(0.08f, h, 0.10f));
+        drawCube(shader, vao, colMat, whiteTrim);
+    }
+    for (int f = 0; f < 5; f++) {
+        float winY = (f * h1) + (h1 * 0.55f);
+        glm::mat4 winWestInner = glm::translate(glm::mat4(1.0f), glm::vec3(innerWestX, winY, z));
+        winWestInner = glm::scale(winWestInner, glm::vec3(0.05f, h1 * 0.50f, sideWingDepth * 0.75f));
+        drawCube(shader, vao, winWestInner, windowGlass);
+    }
+
+    // --- East Inner Wall ---
+    for (int c = 0; c < 5; c++) {
+        glm::mat4 colMat = glm::translate(glm::mat4(1.0f), glm::vec3(innerEastX - 0.02f, h / 2.0f, colOffsetsZ[c]));
+        colMat = glm::scale(colMat, glm::vec3(0.08f, h, 0.10f));
+        drawCube(shader, vao, colMat, whiteTrim);
+    }
+    for (int f = 0; f < 5; f++) {
+        float winY = (f * h1) + (h1 * 0.55f);
+        glm::mat4 winEastInner = glm::translate(glm::mat4(1.0f), glm::vec3(innerEastX, winY, z));
+        winEastInner = glm::scale(winEastInner, glm::vec3(0.05f, h1 * 0.50f, sideWingDepth * 0.75f));
+        drawCube(shader, vao, winEastInner, windowGlass);
+    }
+
+    // --- North Inner Wall ---
+    for (int c = 0; c < 5; c++) {
+        glm::mat4 colMat = glm::translate(glm::mat4(1.0f), glm::vec3(colOffsetsX[c], h / 2.0f, innerNorthZ + 0.02f));
+        colMat = glm::scale(colMat, glm::vec3(0.10f, h, 0.08f));
+        drawCube(shader, vao, colMat, whiteTrim);
+    }
+    for (int f = 0; f < 5; f++) {
+        float winY = (f * h1) + (h1 * 0.55f);
+        glm::mat4 winNorthInner = glm::translate(glm::mat4(1.0f), glm::vec3(x, winY, innerNorthZ));
+        winNorthInner = glm::scale(winNorthInner, glm::vec3(wingWidth * 0.75f, h1 * 0.50f, 0.05f));
+        drawCube(shader, vao, winNorthInner, windowGlass);
+    }
+
+    // --- South Inner Wall ---
+    for (int c = 0; c < 5; c++) {
+        glm::mat4 colMat = glm::translate(glm::mat4(1.0f), glm::vec3(colOffsetsX[c], h / 2.0f, innerSouthZ - 0.02f));
+        colMat = glm::scale(colMat, glm::vec3(0.10f, h, 0.08f));
+        drawCube(shader, vao, colMat, whiteTrim);
+    }
+    for (int f = 0; f < 5; f++) {
+        float winY = (f * h1) + (h1 * 0.55f);
+        glm::mat4 winSouthInner = glm::translate(glm::mat4(1.0f), glm::vec3(x, winY, innerSouthZ));
+        winSouthInner = glm::scale(winSouthInner, glm::vec3(wingWidth * 0.75f, h1 * 0.50f, 0.05f));
+        drawCube(shader, vao, winSouthInner, windowGlass);
+    }
+}
+
+
+//============================================================================================
 void drawRoads(Shader& shaderProgram, VAO& vao) {
     glm::vec3 asphalt(0.25f, 0.25f, 0.25f);
     glm::vec3 stripeColor(0.95f, 0.85f, 0.10f);
 
-    glm::mat4 mainRoad = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.05f, 0.0f));
-    mainRoad = glm::scale(mainRoad, glm::vec3(3.5f, 0.02f, 60.0f));
+    glm::mat4 mainRoad = glm::translate(glm::mat4(1.0f), glm::vec3(1.5f, 0.05f, 0.0f));
+    mainRoad = glm::scale(mainRoad, glm::vec3(7.0f, 0.02f, 60.0f));
     drawCube(shaderProgram, vao, mainRoad, asphalt);
 
     for (float z = -28.0f; z <= 28.0f; z += 4.0f) {
-        glm::mat4 stripe = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.07f, z));
+        glm::mat4 stripe = glm::translate(glm::mat4(1.0f), glm::vec3(1.5f, 0.07f, z));
         stripe = glm::scale(stripe, glm::vec3(0.2f, 0.02f, 2.0f));
         drawCube(shaderProgram, vao, stripe, stripeColor);
     }
@@ -495,7 +1286,7 @@ void drawRoundabout(Shader& shaderProgram, VAO& vao) {
     glm::vec3 grass(0.2f, 0.6f, 0.2f);
     glm::vec3 monumentColor(0.8f, 0.8f, 0.8f);
 
-    float centerX = 12.0f, centerZ = 27.0f;
+    float centerX = 12.0f, centerZ = 17.0f;
 
     glm::mat4 ring = glm::translate(glm::mat4(1.0f), glm::vec3(centerX, 0.05f, centerZ));
     ring = glm::scale(ring, glm::vec3(8.0f, 0.02f, 8.0f));
@@ -803,7 +1594,145 @@ void drawBus(Shader& shaderProgram, VAO& vao, float x, float z, float dirZ, floa
     }
 }
 
+void drawURPBuilding(Shader& shaderProgram, VAO& vao, float x, float y, float z, float scale = 1.0f) {
+    // -------------------------------------------------------------
+    // KUET URP BUILDING COLOR PALETTE
+    // -------------------------------------------------------------
+    glm::vec3 tanConcrete(0.85f, 0.74f, 0.60f);   // Primary beige/tan building finish
+    glm::vec3 darkConcrete(0.68f, 0.58f, 0.46f);  // Inner recessed walls & trims
+    glm::vec3 whitePillar(0.92f, 0.93f, 0.95f);   // White cylindrical columns
+    glm::vec3 glassWindow(0.18f, 0.22f, 0.28f);   // Tinted window glass
+    glm::vec3 stairWhite(0.88f, 0.88f, 0.86f);    // Grand staircase steps
+    glm::vec3 stairRailing(0.55f, 0.15f, 0.12f);  // Terracotta/red staircase side walls
+    glm::vec3 louverColor(0.78f, 0.66f, 0.52f);   // Vertical sunscreen louvers
+    glm::vec3 railingColor(0.70f, 0.72f, 0.75f);  // Balcony railings
+    glm::vec3 waterTankColor(0.12f, 0.14f, 0.18f); // Roof water tanks
 
+    glm::mat4 baseMat = glm::translate(glm::mat4(1.0f), glm::vec3(x, y, z));
+    baseMat = glm::scale(baseMat, glm::vec3(scale, scale, scale));
+
+    // -------------------------------------------------------------
+    // 1. MAIN REAR & SIDE WING FRAME
+    // -------------------------------------------------------------
+    // Main Rear Mass (5 stories tall)
+    glm::mat4 mainMass = glm::translate(baseMat, glm::vec3(0.0f, 7.5f, -6.0f));
+    mainMass = glm::scale(mainMass, glm::vec3(22.0f, 15.0f, 6.0f));
+    drawCube(shaderProgram, vao, mainMass, tanConcrete);
+
+    // Right Solid Wing (Front right block with clean face)
+    glm::mat4 rightWing = glm::translate(baseMat, glm::vec3(8.5f, 7.5f, 0.0f));
+    rightWing = glm::scale(rightWing, glm::vec3(5.0f, 15.0f, 6.0f));
+    drawCube(shaderProgram, vao, rightWing, tanConcrete);
+
+    // Left Wing Backing Block
+    glm::mat4 leftWing = glm::translate(baseMat, glm::vec3(-8.5f, 7.5f, -1.0f));
+    leftWing = glm::scale(leftWing, glm::vec3(5.0f, 15.0f, 14.0f));
+    drawCube(shaderProgram, vao, leftWing, tanConcrete);
+
+    // -------------------------------------------------------------
+    // 2. RIGHT WING VERTICAL SLIT WINDOWS
+    // -------------------------------------------------------------
+    for (int i = 0; i < 4; i++) {
+        glm::mat4 slitWin = glm::translate(baseMat, glm::vec3(8.5f, 3.0f + i * 3.2f, 3.01f));
+        slitWin = glm::scale(slitWin, glm::vec3(0.8f, 1.8f, 0.05f));
+        drawCube(shaderProgram, vao, slitWin, glassWindow);
+    }
+
+    // -------------------------------------------------------------
+    // 3. CENTRAL ATRIUM BALCONY SLABS & CORRIDORS
+    // -------------------------------------------------------------
+    const int NUM_FLOORS = 5;
+    float floorHeight = 2.8f;
+
+    for (int i = 0; i < NUM_FLOORS; i++) {
+        float fY = 1.2f + i * floorHeight;
+
+        // Atrium Corridor Floor Slab
+        glm::mat4 floorSlab = glm::translate(baseMat, glm::vec3(0.0f, fY, -1.0f));
+        floorSlab = glm::scale(floorSlab, glm::vec3(12.0f, 0.4f, 6.0f));
+        drawCube(shaderProgram, vao, floorSlab, tanConcrete);
+
+        // Recessed Back Wall Windows per floor
+        glm::mat4 backWin = glm::translate(baseMat, glm::vec3(0.0f, fY + 1.2f, -3.95f));
+        backWin = glm::scale(backWin, glm::vec3(11.0f, 1.8f, 0.05f));
+        drawCube(shaderProgram, vao, backWin, glassWindow);
+
+        // Balcony Silver Railings
+        if (i > 0) {
+            glm::mat4 railing = glm::translate(baseMat, glm::vec3(0.0f, fY + 0.6f, 1.95f));
+            railing = glm::scale(railing, glm::vec3(11.8f, 0.8f, 0.08f));
+            drawCube(shaderProgram, vao, railing, railingColor);
+        }
+    }
+
+    // -------------------------------------------------------------
+    // 4. FRONT ATRIUM STRUCTURAL PILLARS (White Cylinders)
+    // -------------------------------------------------------------
+    float pillarX[] = { -5.2f, -1.8f, 1.8f, 5.2f };
+    for (int i = 0; i < 4; i++) {
+        glm::mat4 pMat = glm::translate(baseMat, glm::vec3(pillarX[i], 0.0f, 1.90f));
+        // Using drawCylinder for smooth structural columns
+        drawCylinder(shaderProgram, 0.25f, 13.5f, pMat, whitePillar);
+    }
+
+    // -------------------------------------------------------------
+    // 5. GRAND CENTRAL ENTRANCE STAIRCASE
+    // -------------------------------------------------------------
+    int numSteps = 16;
+    float stepWidth = 6.5f;
+    float stepDepth = 0.35f;
+    float stepHeight = 0.20f;
+    float stairStartZ = 2.2f;
+
+    for (int i = 0; i < numSteps; i++) {
+        glm::mat4 step = glm::translate(baseMat, glm::vec3(-0.5f, i * stepHeight + 0.1f, stairStartZ - i * stepDepth));
+        step = glm::scale(step, glm::vec3(stepWidth, stepHeight, stepDepth));
+        drawCube(shaderProgram, vao, step, stairWhite);
+    }
+
+    // Staircase Terracotta/Red Side Walls
+    glm::mat4 stairWallL = glm::translate(baseMat, glm::vec3(-0.5f - stepWidth * 0.5f - 0.15f, 1.6f, stairStartZ - (numSteps * stepDepth * 0.5f)));
+    stairWallL = glm::scale(stairWallL, glm::vec3(0.3f, 2.8f, numSteps * stepDepth));
+    drawCube(shaderProgram, vao, stairWallL, stairRailing);
+
+    glm::mat4 stairWallR = glm::translate(baseMat, glm::vec3(-0.5f + stepWidth * 0.5f + 0.15f, 1.6f, stairStartZ - (numSteps * stepDepth * 0.5f)));
+    stairWallR = glm::scale(stairWallR, glm::vec3(0.3f, 2.8f, numSteps * stepDepth));
+    drawCube(shaderProgram, vao, stairWallR, stairRailing);
+
+    // -------------------------------------------------------------
+    // 6. LEFT FACADE VERTICAL SUNSCREEN LOUVERS
+    // -------------------------------------------------------------
+    const int NUM_LOUVERS = 14;
+    float louverStartX = -10.8f;
+    float louverSpacing = 0.35f;
+
+    for (int i = 0; i < NUM_LOUVERS; i++) {
+        // Lower Section Louver Screen
+        glm::mat4 louver = glm::translate(baseMat, glm::vec3(louverStartX + i * louverSpacing, 4.2f, 5.95f));
+        louver = glm::scale(louver, glm::vec3(0.08f, 6.2f, 0.30f));
+        drawCube(shaderProgram, vao, louver, louverColor);
+    }
+
+    // Upper Left Window Grids
+    for (int floor = 3; floor < 5; floor++) {
+        for (int bay = 0; bay < 6; bay++) {
+            glm::mat4 gridWin = glm::translate(baseMat, glm::vec3(-10.5f + bay * 0.8f, 1.2f + floor * floorHeight, 5.95f));
+            gridWin = glm::scale(gridWin, glm::vec3(0.65f, 1.8f, 0.05f));
+            drawCube(shaderProgram, vao, gridWin, glassWindow);
+        }
+    }
+
+    // -------------------------------------------------------------
+    // 7. ROOFTOP TOWER & WATER TANKS
+    // -------------------------------------------------------------
+    // Elevator Shaft Tower Extension
+    glm::mat4 roofTower = glm::translate(baseMat, glm::vec3(-4.5f, 15.8f, -4.0f));
+    roofTower = glm::scale(roofTower, glm::vec3(3.5f, 1.8f, 3.5f));
+    drawCube(shaderProgram, vao, roofTower, tanConcrete);
+
+    // Black Rooftop Water Tanks (Gazi Tanks from photograph)
+    
+}
 
 int main() {
     glfwInit();
@@ -873,10 +1802,10 @@ int main() {
         drawFourConnectedBlocks(shaderProgram, VAO1, 12.0f);
 
         // Halls
-        drawCourtyardBuilding(shaderProgram, VAO1, -22.0f, -18.0f, 12.0f, 12.0f, 4.5f, 1.8f, glm::vec3(0.85f, 0.75f, 0.65f)); // Hall 2
-        drawCourtyardBuilding(shaderProgram, VAO1, -22.0f, 12.0f, 12.0f, 20.0f, 4.5f, 1.8f, glm::vec3(0.85f, 0.75f, 0.65f));  // Hall 3
-        drawCourtyardBuilding(shaderProgram, VAO1, -8.0f, 2.0f, 7.0f, 6.0f, 3.5f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f));      // Hall 1
-        drawCourtyardBuilding(shaderProgram, VAO1, -8.0f, 16.0f, 7.0f, 6.0f, 3.5f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f));     // Hall 4
+        drawSSHAKH(shaderProgram, VAO1, -22.0f, -5.0f, 12.0f, 12.0f, 5.83f, 1.5f, glm::vec3(0.80f, 0.70f, 0.60f)); // AEH
+        drawSSHAKH(shaderProgram, VAO1, -22.0f, 12.0f, 12.0f, 15.0f, 5.83f, 1.8f, glm::vec3(0.80f, 0.70f, 0.60f));  // SSH
+        drawFFHDRH(shaderProgram, VAO1, -11.0f, 3.0f, 7.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f));      // FFH
+        drawFFHDRH(shaderProgram, VAO1, -11.0f, 23.0f, 7.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f));     // DRH
 
         // Roads & Roundabout
         drawRoads(shaderProgram, VAO1);
@@ -886,28 +1815,12 @@ int main() {
         float treeZ[] = { -22.0f, -14.0f, -6.0f, 2.0f, 10.0f, 18.0f };
         for (float z : treeZ) {
             drawTree(shaderProgram, VAO1, -3.2f, z);
-            drawTree(shaderProgram, VAO1, 3.2f, z);
+            drawTree(shaderProgram, VAO1, 5.8f, z);
         }
         drawTree(shaderProgram, VAO1, 16.0f, 22.0f);
         drawTree(shaderProgram, VAO1, 16.0f, 31.0f);
 
-        // Moving Car Animation
-        //float time = (float)glfwGetTime();
-        //float carSpeed = 8.0f;
-        //float roadLength = 50.0f;
-
-        //float cycle = fmod(time * carSpeed, roadLength * 2.0f);
-        //float carZ, dirZ;
-        //if (cycle < roadLength) {
-        //    carZ = -25.0f + cycle;
-        //    dirZ = 1.0f;
-        //}
-        //else {
-        //    carZ = 25.0f - (cycle - roadLength);
-        //    dirZ = -1.0f;
-        //}
-
-     //   drawCar(shaderProgram, VAO1, (dirZ > 0 ? 0.8f : -0.8f), carZ, dirZ);
+     
 
         //===========================================================================
 
@@ -934,11 +1847,15 @@ int main() {
         float busWheelRot = glm::degrees(time * speed / 0.48f);
 
         // Draw Car (Left Lane) & Bus (Right Lane) driving together with spinning wheels
-        drawCar(shaderProgram, VAO1, (dirZ > 0 ? -1.2f : 1.2f), -vehicleZ, -dirZ, -carWheelRot);
-        drawBus(shaderProgram, VAO1, (dirZ > 0 ? 1.4f : -1.4f), vehicleZ, dirZ, busWheelRot);
+        drawCar(shaderProgram, VAO1, (dirZ > 0 ? -0.1f : 3.2f), -vehicleZ, -dirZ, -carWheelRot);
+        drawBus(shaderProgram, VAO1, (dirZ > 0 ? 3.2f : -0.1f), vehicleZ, dirZ, busWheelRot);
 
 
         //===============================================================================
+
+        // Render KUET URP Building along the side of the road
+      // drawURPBuilding(shaderProgram, VAO1, -12.0f, 0.0f, -5.0f, 1.0f);
+
 
         glfwSwapBuffers(window);
         glfwPollEvents();
