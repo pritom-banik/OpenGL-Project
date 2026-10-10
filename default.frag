@@ -19,8 +19,8 @@ uniform vec3 shadowLightDirection;
 uniform vec3 directionalLightColor;
 uniform vec3 pointLightPosition;
 uniform vec3 pointLightColor;
-uniform vec3 spotLightPositions[20];
-uniform vec3 spotLightDirections[20];
+uniform vec3 spotLightPositions[26];
+uniform vec3 spotLightDirections[26];
 uniform vec3 spotLightColor;
 uniform vec3 areaLightPositions[4];
 uniform vec3 areaLightColor;
@@ -118,7 +118,7 @@ void main() {
             pointLights += illuminate(normal, normalize(delta), viewDir, pointLightColor, attenuation);
         }
         if (spotLightEnabled == 1) {
-            for (int i = 0; i < 20; ++i) {
+            for (int i = 0; i < 26; ++i) {
                 vec3 delta = spotLightPositions[i] - FragPos;
                 float distanceToLight = length(delta);
                 float theta = dot(normalize(-delta), normalize(spotLightDirections[i]));

@@ -29,7 +29,7 @@ float lastY = height / 2.0f;
 bool isDragging = false;
 bool firstMouse = true;
 // Global spotlight state
-bool spotlightOn = true;
+bool spotlightOn = false;
 // Global shading mode tracker (0 = Flat, 1 = Gouraud, 2 = Phong)
 int currentShadingMode = 2;
 // Global Mode Tracker
@@ -39,6 +39,16 @@ bool directionalLightOn = true;
 bool areaLightOn = true;
 bool shadowsOn = true;
 bool hallWindowLightsOn = false;
+bool manualBusControl = false;
+float manualBusX = 5.25f;
+float manualBusZ = -20.0f;
+float manualBusDirection = 1.0f;
+float manualBusWheelRotation = 0.0f;
+const float lampPostXPositions[] = { -0.5f, 7.5f };
+const float lampPostZPositions[] = { -10.0f, 2.0f, 14.0f, 22.0f, 32.0f };
+const float outerLampPostZPositions[] = { -10.0f, 2.0f, 14.0f };
+const float lampHeadOffsets[] = { -1.0f, 1.0f };
+constexpr int streetLampSpotCount = 26;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
@@ -94,8 +104,21 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
     if (cameraRadius > 120.0f) cameraRadius = 120.0f; // Maximum zoom-out limit
 }
 
+void moveManualBus(float moveX, float moveZ, float distance) {
+    glm::vec2 movement(moveX, moveZ);
+    float magnitude = glm::length(movement);
+    if (magnitude <= 0.0f) return;
+
+    movement /= magnitude;
+    manualBusX = glm::clamp(manualBusX + movement.x * distance, 1.75f, 5.25f);
+    manualBusZ = glm::clamp(manualBusZ + movement.y * distance, -16.2f, 42.2f);
+    if (movement.y > 0.0f) manualBusDirection = 1.0f;
+    else if (movement.y < 0.0f) manualBusDirection = -1.0f;
+    manualBusWheelRotation += glm::degrees(distance / 0.68f);
+}
+
 // Keyboard Input Processing
-void processInput(GLFWwindow* window) {
+void processInput(GLFWwindow* window, float deltaTime) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
@@ -132,6 +155,16 @@ void processInput(GLFWwindow* window) {
     }
     else if (glfwGetKey(window, GLFW_KEY_H) == GLFW_RELEASE) {
         hKeyPressed = false;
+    }
+
+    if (manualBusControl) {
+        float moveX = 0.0f;
+        float moveZ = 0.0f;
+        // if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) moveX -= 1.0f;
+        // if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) moveX += 1.0f;
+        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) moveZ += 1.0f;
+        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) moveZ -= 1.0f;
+        moveManualBus(moveX, moveZ, 8.0f * deltaTime);
     }
 
 
@@ -1764,7 +1797,7 @@ void drawRoads(Shader& shaderProgram, VAO& vao) {
     mainRoad = glm::scale(mainRoad, glm::vec3(7.0f, 0.02f, 66.0f));
     drawCube(shaderProgram, vao, mainRoad, asphalt);
 
-    for (float z = -28.0f; z <= 28.0f; z += 4.0f) {
+    for (float z = -18.0f; z <= 44.0f; z += 4.0f) {
         glm::mat4 stripe = glm::translate(glm::mat4(1.0f), glm::vec3(3.5f, 0.07f, z));
         stripe = glm::scale(stripe, glm::vec3(0.2f, 0.02f, 2.0f));
         drawCube(shaderProgram, vao, stripe, stripeColor);
@@ -1930,6 +1963,17 @@ void drawStreetLightPost(Shader& shaderProgram, VAO& vao, float x, float z, bool
         glm::mat4 bulb = glm::translate(glm::mat4(1.0f), glm::vec3(lx, 4.02f, z));
         bulb = glm::scale(bulb, glm::vec3(0.14f, 0.12f, 0.14f));
         drawSphere(shaderProgram, bulb, bulbColor, isLit ? 0.88f : 0.58f, isLit);
+    }
+}
+
+void drawStreetLights(Shader& shaderProgram, VAO& vao, bool isLit) {
+    for (float z : lampPostZPositions) {
+        for (float x : lampPostXPositions) {
+            drawStreetLightPost(shaderProgram, vao, x, z, isLit);
+        }
+    }
+    for (float z : outerLampPostZPositions) {
+        drawStreetLightPost(shaderProgram, vao, 25.5f, z, isLit);
     }
 }
 
@@ -2362,6 +2406,53 @@ void drawXZRedDots(Shader& shaderProgram, VAO& vao, float gridRange = 35.0f, flo
     }
 }
 
+struct AutomaticBusMotion {
+    float x;
+    float z;
+    float direction;
+    float wheelRotation;
+};
+
+AutomaticBusMotion getAutomaticBusMotion(float time) {
+    const float speed = 5.0f;
+    const float roadStart = -20.0f;
+    const float roadLength = 66.0f;
+    const float cycle = fmod(time * speed, roadLength * 2.0f);
+    float vehicleZ;
+    float directionZ;
+
+    if (cycle < roadLength) {
+        vehicleZ = roadStart + cycle;
+        directionZ = 1.0f;
+    }
+    else {
+        vehicleZ = roadStart + roadLength - (cycle - roadLength);
+        directionZ = -1.0f;
+    }
+
+    return {
+        directionZ > 0.0f ? 5.25f : 1.75f,
+        vehicleZ,
+        directionZ,
+        glm::degrees(time * speed / 0.68f)
+    };
+}
+
+void drawMovingVehicles(Shader& shaderProgram, VAO& vao, float time) {
+    if (manualBusControl) {
+        drawBus(shaderProgram, vao, manualBusX, manualBusZ, manualBusDirection, manualBusWheelRotation);
+        return;
+    }
+
+    const float speed = 5.0f;
+    const float roadStart = -20.0f;
+    const float roadLength = 66.0f;
+    const AutomaticBusMotion bus = getAutomaticBusMotion(time);
+    const float carWheelRotation = glm::degrees(time * speed / 0.55f);
+    drawCar(shaderProgram, vao, (bus.direction > 0.0f ? 1.75f : 5.25f), roadStart + roadLength - bus.z, -bus.direction, carWheelRotation);
+    drawBus(shaderProgram, vao, bus.x, bus.z, bus.direction, bus.wheelRotation);
+}
+
 void drawCampusScene(Shader& shaderProgram, VAO& vao, float time) {
     glm::mat4 ground = glm::scale(glm::mat4(1.0f), glm::vec3(150.0f, 0.1f, 150.0f));
     drawCube(shaderProgram, vao, ground, glm::vec3(0.25f, 0.55f, 0.22f));
@@ -2375,36 +2466,21 @@ void drawCampusScene(Shader& shaderProgram, VAO& vao, float time) {
     drawRoads(shaderProgram, vao);
     drawRoundabout(shaderProgram, vao);
 
-    float treeZ[] = { -22.0f, -14.0f, -6.0f, 2.0f, 10.0f, 18.0f };
+    float treeZ[] = { -22.0f, -14.0f, -6.0f, 4.0f, 10.0f, 18.0f, 23.0f, 30.0f };
     for (float z : treeZ) {
         drawTree(shaderProgram, vao, -3.2f, z);
         drawTree(shaderProgram, vao, 8.8f, z);
+        if(z<18){
+        drawTree(shaderProgram, vao, 27.8f, z);
+        }
     }
     drawTree(shaderProgram, vao, 16.0f, 22.0f);
     drawTree(shaderProgram, vao, 16.0f, 31.0f);
 
-    float lightZ[] = { -25.0f, -10.0f, 2.0f, 14.0f, 26.0f };
-    for (float z : lightZ) {
-        drawStreetLightPost(shaderProgram, vao, -0.5f, z, false);
-        drawStreetLightPost(shaderProgram, vao, 7.5f, z, false);
-    }
+    drawStreetLights(shaderProgram, vao, false);
 
-    float speed = 8.0f;
-    float roadLength = 50.0f;
-    float cycle = fmod(time * speed, roadLength * 2.0f);
-    float vehicleZ, dirZ;
-    if (cycle < roadLength) {
-        vehicleZ = -25.0f + cycle;
-        dirZ = 1.0f;
-    }
-    else {
-        vehicleZ = 25.0f - (cycle - roadLength);
-        dirZ = -1.0f;
-    }
-    float carWheelRot = glm::degrees(time * speed / 0.35f);
-    float busWheelRot = glm::degrees(time * speed / 0.48f);
-    drawCar(shaderProgram, vao, (dirZ > 0 ? -0.1f : 3.2f), -vehicleZ, -dirZ, -carWheelRot);
-    drawBus(shaderProgram, vao, (dirZ > 0 ? 3.2f : -0.1f), vehicleZ, dirZ, busWheelRot);
+    drawMovingVehicles(shaderProgram, vao, time);
+
 }
 
 int main() {
@@ -2439,7 +2515,7 @@ int main() {
 
     Shader shaderProgram("default.vert", "default.frag");
     // Sun position in world space
-    glm::vec3 sunPos(15.0f, 30.0f, 15.0f);
+    glm::vec3 sunPos(40.0f, 30.0f, 15.0f);
 
     VAO VAO1;
     VAO1.Bind();
@@ -2480,10 +2556,12 @@ int main() {
 
 
 
+    float previousFrameTime = static_cast<float>(glfwGetTime());
     while (!glfwWindowShouldClose(window)) {
-        processInput(window);
-
         float frameTime = static_cast<float>(glfwGetTime());
+        float deltaTime = frameTime - previousFrameTime;
+        previousFrameTime = frameTime;
+        processInput(window, deltaTime);
         int shadowDisplayW, shadowDisplayH;
         glfwGetFramebufferSize(window, &shadowDisplayW, &shadowDisplayH);
         if (shadowDisplayW == 0) shadowDisplayW = 1;
@@ -2611,16 +2689,18 @@ int main() {
         glm::vec3 pointColor(0.55f, 0.68f, 1.0f);
         glm::vec3 spotDirection(0.0f, -1.0f, 0.0f);
         glm::vec3 spotColor(1.0f, 0.78f, 0.42f);
-        const float lampZPositions[] = { -25.0f, -10.0f, 2.0f, 14.0f, 26.0f };
-        const float lampXPositions[] = { -0.5f, 7.5f };
-        const float lampHeadOffsets[] = { -1.0f, 1.0f };
-        glm::vec3 spotPositions[20];
+        glm::vec3 spotPositions[streetLampSpotCount];
         int spotIndex = 0;
-        for (float lampX : lampXPositions) {
-            for (float lampZ : lampZPositions) {
+        for (float lampX : lampPostXPositions) {
+            for (float lampZ : lampPostZPositions) {
                 for (float headOffset : lampHeadOffsets) {
                     spotPositions[spotIndex++] = glm::vec3(lampX + headOffset, 4.02f, lampZ);
                 }
+            }
+        }
+        for (float lampZ : outerLampPostZPositions) {
+            for (float headOffset : lampHeadOffsets) {
+                spotPositions[spotIndex++] = glm::vec3(25.5f + headOffset, 4.02f, lampZ);
             }
         }
         glm::vec3 areaPositions[4] = {
@@ -2651,7 +2731,7 @@ int main() {
         glUniform3fv(glGetUniformLocation(shaderProgram.ID, "pointLightPosition"), 1, glm::value_ptr(pointPosition));
         glUniform3fv(glGetUniformLocation(shaderProgram.ID, "pointLightColor"), 1, glm::value_ptr(pointColor));
         glUniform3fv(glGetUniformLocation(shaderProgram.ID, "spotLightColor"), 1, glm::value_ptr(spotColor));
-        for (int i = 0; i < 20; ++i) {
+        for (int i = 0; i < streetLampSpotCount; ++i) {
             std::string positionName = "spotLightPositions[" + std::to_string(i) + "]";
             std::string directionName = "spotLightDirections[" + std::to_string(i) + "]";
             glUniform3fv(glGetUniformLocation(shaderProgram.ID, positionName.c_str()), 1, glm::value_ptr(spotPositions[i]));
@@ -2690,7 +2770,7 @@ int main() {
         //=============================================================
 
         // Draw red dot at every (X, Z) coordinate step of 2.0 units
-        drawXZRedDots(shaderProgram, VAO1, 35.0f, 2.0f);
+        //drawXZRedDots(shaderProgram, VAO1, 35.0f, 2.0f);
 
 
         //=================================================
@@ -2713,20 +2793,20 @@ int main() {
         drawRoundabout(shaderProgram, VAO1);
 
         // Trees
-        float treeZ[] = { -22.0f, -14.0f, -6.0f, 2.0f, 10.0f, 18.0f };
+       float treeZ[] = { -22.0f, -14.0f, -6.0f, 4.0f, 10.0f, 18.0f, 23.0f, 30.0f };
         for (float z : treeZ) {
             drawTree(shaderProgram, VAO1, -3.2f, z);
             drawTree(shaderProgram, VAO1, 8.8f, z);
+            if(z<18){
+            drawTree(shaderProgram, VAO1, 27.8f, z);
+            }
         }
         drawTree(shaderProgram, VAO1, 16.0f, 22.0f);
         drawTree(shaderProgram, VAO1, 16.0f, 31.0f);
 
 
-        float lightZ[] = { -25.0f, -10.0f, 2.0f, 14.0f, 26.0f };
-        for (float z : lightZ) {
-            drawStreetLightPost(shaderProgram, VAO1, -0.5f, z, spotlightOn); // Left road side
-            drawStreetLightPost(shaderProgram, VAO1, 7.5f, z, spotlightOn); // Right road side
-        }
+        drawStreetLights(shaderProgram, VAO1, spotlightOn);
+
 
      
 
@@ -2734,29 +2814,7 @@ int main() {
 
 
 
-        // Vehicle Movement & Rolling Animation Logic
-        float time = frameTime;
-        float speed = 8.0f;
-        float roadLength = 50.0f;
-
-        float cycle = fmod(time * speed, roadLength * 2.0f);
-        float vehicleZ, dirZ;
-        if (cycle < roadLength) {
-            vehicleZ = -25.0f + cycle;
-            dirZ = 1.0f;   // Moving forward (+Z)
-        }
-        else {
-            vehicleZ = 25.0f - (cycle - roadLength);
-            dirZ = -1.0f;  // Moving backward (-Z)
-        }
-
-        // Calculate wheel rotation angles based on distance (θ = distance / radius)
-        float carWheelRot = glm::degrees(time * speed / 0.35f);
-        float busWheelRot = glm::degrees(time * speed / 0.48f);
-
-        // Draw Car (Left Lane) & Bus (Right Lane) driving together with spinning wheels
-        drawCar(shaderProgram, VAO1, (dirZ > 0 ? -0.1f : 3.2f), -vehicleZ, -dirZ, -carWheelRot);
-        drawBus(shaderProgram, VAO1, (dirZ > 0 ? 3.2f : -0.1f), vehicleZ, dirZ, busWheelRot);
+        drawMovingVehicles(shaderProgram, VAO1, frameTime);
 
 
         //===============================================================================
@@ -2780,6 +2838,24 @@ int main() {
         }
 
         ImGui::Separator();
+        if (ImGui::Checkbox("Manual bus control", &manualBusControl) && manualBusControl) {
+            const AutomaticBusMotion bus = getAutomaticBusMotion(frameTime);
+            manualBusX = bus.x;
+            manualBusZ = bus.z;
+            manualBusDirection = bus.direction;
+            manualBusWheelRotation = bus.wheelRotation;
+        }
+        if (manualBusControl) {
+            ImGui::Text("Move bus");
+            if (ImGui::Button("Maingate", ImVec2(64.0f, 0.0f))) moveManualBus(0.0f, 1.0f, 1.2f);
+            ImGui::SameLine();
+            if (ImGui::Button("IT Park", ImVec2(64.0f, 0.0f))) moveManualBus(0.0f, -1.0f, 1.2f);
+            ImGui::SameLine();
+            // if (ImGui::Button("Left", ImVec2(64.0f, 0.0f))) moveManualBus(-1.0f, 0.0f, 1.2f);
+            // ImGui::SameLine();
+            // if (ImGui::Button("Right", ImVec2(64.0f, 0.0f))) moveManualBus(1.0f, 0.0f, 1.2f);
+            // ImGui::Text("Use arrow keys or these buttons");
+        }
         if (ImGui::Checkbox("Day mode", &isDayMode)) {
             spotlightOn = !isDayMode;
         }
