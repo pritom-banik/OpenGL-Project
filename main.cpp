@@ -1,4 +1,7 @@
 #include <iostream>
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
 #include <cmath>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -20,11 +23,17 @@ const unsigned int height = 960;
 // Interactive Camera Parameters
 float cameraRadius = 45.0f;  // Zoom distance
 float yaw = 90.0f;          // Horizontal angle (degrees)
-float pitch = 30.0f;         // Vertical angle (degrees)
+float pitch = 20.0f;         // Vertical angle (degrees)
 float lastX = width / 2.0f;
 float lastY = height / 2.0f;
 bool isDragging = false;
 bool firstMouse = true;
+// Global spotlight state
+bool spotlightOn = false;
+// Global shading mode tracker (0 = Flat, 1 = Gouraud, 2 = Phong)
+int currentShadingMode = 2;
+// Global Mode Tracker
+bool isDayMode = false;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
@@ -87,14 +96,51 @@ void processInput(GLFWwindow* window) {
 
     // Keyboard rotation & height controls directly adjust camera angles/radius
     float rotateSpeed = 1.0f;
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        yaw -= rotateSpeed;
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        yaw += rotateSpeed;
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    //if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    //    yaw -= rotateSpeed;
+    //if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+    //    yaw += rotateSpeed;
+    //if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    //    pitch = std::min(pitch + rotateSpeed, 89.0f);
+    //if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    //    pitch = std::max(pitch - rotateSpeed, 1.0f);
+
+
+
+    // Toggle Spotlight / Street Lights with 'L' Key
+    static bool lKeyPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+        if (!lKeyPressed) {
+            spotlightOn = !spotlightOn;
+            lKeyPressed = true;
+        }
+    }
+    else if (glfwGetKey(window, GLFW_KEY_L) == GLFW_RELEASE) {
+        lKeyPressed = false;
+    }
+
+
+    //=============================================================
+
+    // Shading Mode Toggles (Q = Flat, W = Gouraud, E = Phong)
+    static bool qPressed = false, wPressed = false, ePressed = false;
+
+    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
+        if (!qPressed) { currentShadingMode = 0; qPressed = true; }
+    }
+    else { qPressed = false; }
+
+    if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) {
+        if (!wPressed) { currentShadingMode = 1; wPressed = true; }
+        // Allows pitch adjustment while holding W without re-triggering mode every frame
         pitch = std::min(pitch + rotateSpeed, 89.0f);
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        pitch = std::max(pitch - rotateSpeed, 1.0f);
+    }
+    else { wPressed = false; }
+
+    if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+        if (!ePressed) { currentShadingMode = 2; ePressed = true; }
+    }
+    else { ePressed = false; }
 }
 
 // Cube vertices (Positions + Normals)
@@ -1254,12 +1300,12 @@ void drawRoads(Shader& shaderProgram, VAO& vao) {
     glm::vec3 asphalt(0.25f, 0.25f, 0.25f);
     glm::vec3 stripeColor(0.95f, 0.85f, 0.10f);
 
-    glm::mat4 mainRoad = glm::translate(glm::mat4(1.0f), glm::vec3(1.5f, 0.05f, 0.0f));
+    glm::mat4 mainRoad = glm::translate(glm::mat4(1.0f), glm::vec3(3.5f, 0.05f, 0.0f));
     mainRoad = glm::scale(mainRoad, glm::vec3(7.0f, 0.02f, 60.0f));
     drawCube(shaderProgram, vao, mainRoad, asphalt);
 
     for (float z = -28.0f; z <= 28.0f; z += 4.0f) {
-        glm::mat4 stripe = glm::translate(glm::mat4(1.0f), glm::vec3(1.5f, 0.07f, z));
+        glm::mat4 stripe = glm::translate(glm::mat4(1.0f), glm::vec3(3.5f, 0.07f, z));
         stripe = glm::scale(stripe, glm::vec3(0.2f, 0.02f, 2.0f));
         drawCube(shaderProgram, vao, stripe, stripeColor);
     }
@@ -1324,6 +1370,84 @@ void drawTree(Shader& shaderProgram, VAO& vao, float x, float z) {
     glm::mat4 f2 = glm::translate(glm::mat4(1.0f), glm::vec3(x, 4.2f, z));
     f2 = glm::scale(f2, glm::vec3(1.3f, 1.2f, 1.3f));
     drawCube(shaderProgram, vao, f2, foliageColor);
+}
+
+
+
+
+
+void drawStreetLightPost(Shader& shaderProgram, VAO& vao, float x, float z, bool isLit) {
+    // Colors matching image_7a711f.jpg
+    glm::vec3 goldColor(0.85f, 0.68f, 0.25f);   // Ornate brass base, scrollwork & finial
+    glm::vec3 poleColor(0.18f, 0.18f, 0.20f);   // Dark metallic grey pole
+    glm::vec3 shadeColor(0.12f, 0.12f, 0.14f);  // Black bell lamp shades
+    glm::vec3 bulbColor = isLit ? glm::vec3(1.0f, 0.96f, 0.65f) : glm::vec3(0.30f, 0.30f, 0.30f); // Glowing light
+
+    auto drawVerticalCylinder = [&](float radius, float height, glm::vec3 pos, glm::vec3 color) {
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), pos);
+        model = glm::rotate(model, glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        drawCylinder(shaderProgram, radius, height, model, color);
+        };
+
+    // 1. Gold Pedestal Base (Y = 0.0 to 0.8)
+    glm::mat4 base1 = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.10f, z));
+    base1 = glm::scale(base1, glm::vec3(0.50f, 0.20f, 0.50f));
+    drawCube(shaderProgram, vao, base1, goldColor);
+
+    glm::mat4 base2 = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.45f, z));
+    base2 = glm::scale(base2, glm::vec3(0.35f, 0.50f, 0.35f));
+    drawCube(shaderProgram, vao, base2, goldColor);
+
+    glm::mat4 baseCap = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.75f, z));
+    baseCap = glm::scale(baseCap, glm::vec3(0.42f, 0.10f, 0.42f));
+    drawCube(shaderProgram, vao, baseCap, goldColor);
+
+    // 2. Central Dark Main Pole (Y = 0.8 to 4.2)
+    drawVerticalCylinder(0.08f, 3.40f, glm::vec3(x, 2.48f, z), poleColor);
+
+    // Gold Trim Ring mid-pole
+    glm::mat4 ring = glm::translate(glm::mat4(1.0f), glm::vec3(x, 3.80f, z));
+    ring = glm::scale(ring, glm::vec3(0.20f, 0.08f, 0.20f));
+    drawCube(shaderProgram, vao, ring, goldColor);
+
+    // 3. Ornate Gold Scrollwork Cross-Arms at the Top
+    glm::mat4 mainArm = glm::translate(glm::mat4(1.0f), glm::vec3(x, 4.35f, z));
+    mainArm = glm::scale(mainArm, glm::vec3(2.20f, 0.12f, 0.12f));
+    drawCube(shaderProgram, vao, mainArm, goldColor);
+
+    // Central Ornate Crest Arch
+    glm::mat4 crest = glm::translate(glm::mat4(1.0f), glm::vec3(x, 4.55f, z));
+    crest = glm::scale(crest, glm::vec3(0.80f, 0.30f, 0.10f));
+    drawCube(shaderProgram, vao, crest, goldColor);
+
+    // Top Gold Finial Tip
+    glm::mat4 finial = glm::translate(glm::mat4(1.0f), glm::vec3(x, 4.85f, z));
+    finial = glm::scale(finial, glm::vec3(0.12f, 0.30f, 0.12f));
+    drawCube(shaderProgram, vao, finial, goldColor);
+
+    // 4. Twin Lamp Heads (-X and +X Sides)
+    float armOffsetsX[2] = { -1.0f, 1.0f };
+    for (int i = 0; i < 2; i++) {
+        float lx = x + armOffsetsX[i];
+
+        // Black Bell Lamp Shade
+        glm::mat4 shade = glm::translate(glm::mat4(1.0f), glm::vec3(lx, 4.15f, z));
+        shade = glm::scale(shade, glm::vec3(0.40f, 0.25f, 0.40f));
+        drawCube(shaderProgram, vao, shade, shadeColor);
+
+        // Illuminating Glass Bulb
+        glm::mat4 bulb = glm::translate(glm::mat4(1.0f), glm::vec3(lx, 3.95f, z));
+        bulb = glm::scale(bulb, glm::vec3(0.24f, 0.20f, 0.24f));
+        drawCube(shaderProgram, vao, bulb, bulbColor);
+
+        // Downward Light Beam Cone (Only drawn when spotlight is turned ON)
+        if (isLit) {
+            glm::vec3 beamColor(1.0f, 0.95f, 0.70f);
+            glm::mat4 beam = glm::translate(glm::mat4(1.0f), glm::vec3(lx, 1.95f, z));
+            beam = glm::scale(beam, glm::vec3(1.80f, 3.80f, 1.80f));
+            drawCube(shaderProgram, vao, beam, beamColor * 0.35f); // Soft spotlight beam effect
+        }
+    }
 }
 
 void drawCar(Shader& shaderProgram, VAO& vao, float x, float z, float dirZ, float wheelRot) {
@@ -1734,6 +1858,28 @@ void drawURPBuilding(Shader& shaderProgram, VAO& vao, float x, float y, float z,
     
 }
 
+
+
+void drawXZRedDots(Shader& shaderProgram, VAO& vao, float gridRange = 35.0f, float step = 2.0f) {
+    glm::vec3 redColor(1.0f, 0.0f, 0.0f); // Pure Red
+
+    for (float x = -gridRange; x <= gridRange; x += step) {
+        for (float z = -gridRange; z <= gridRange; z += step) {
+            // Flat 2D square on X-Z plane at ground level (Y = 0.15f)
+            if (x <= 1.0f && z <= 1.0f) {
+                glm::mat4 dotMat = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.15f, z));
+                dotMat = glm::scale(dotMat, glm::vec3(0.18f, 10.01f, 0.18f));
+                drawCube(shaderProgram, vao, dotMat, redColor);
+                continue;
+            }
+            glm::mat4 dotMat = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.15f, z));
+            dotMat = glm::scale(dotMat, glm::vec3(0.18f, 0.01f, 0.18f));
+            drawCube(shaderProgram, vao, dotMat, redColor);
+        }
+    }
+}
+
+
 int main() {
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -1749,12 +1895,24 @@ int main() {
     glfwMakeContextCurrent(window);
     gladLoadGL();
 
+   
+
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
     glfwSetCursorPosCallback(window, cursor_position_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    ImGui::StyleColorsDark(); // Sets a nice dark theme
+
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330 core");
+
     Shader shaderProgram("default.vert", "default.frag");
+    // Sun position in world space
+    glm::vec3 sunPos(25.0f, 45.0f, 25.0f);
 
     VAO VAO1;
     VAO1.Bind();
@@ -1769,13 +1927,40 @@ int main() {
 
     glEnable(GL_DEPTH_TEST);
 
+
+
+
+
     while (!glfwWindowShouldClose(window)) {
         processInput(window);
 
         glClearColor(0.45f, 0.70f, 0.90f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+
+        // Dynamic Sky Background Color (Day vs Night)
+        if (isDayMode) {
+            glClearColor(0.45f, 0.70f, 0.90f, 1.0f); // Bright blue sky
+        }
+        else {
+            glClearColor(0.05f, 0.05f, 0.15f, 1.0f); // Dark night sky
+        }
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+
+        // 1. Start the Dear ImGui frame
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+
+
         shaderProgram.Activate();
+        glUniform1i(glGetUniformLocation(shaderProgram.ID, "shadingMode"), currentShadingMode);
+
+        // Pass lighting uniforms based on Day/Night state
+        float ambientVal = isDayMode ? 0.45f : 0.08f;
+        glUniform1f(glGetUniformLocation(shaderProgram.ID, "ambientStrength"), ambientVal);
 
         int displayW, displayH;
         glfwGetFramebufferSize(window, &displayW, &displayH);
@@ -1794,12 +1979,40 @@ int main() {
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "proj"), 1, GL_FALSE, glm::value_ptr(proj));
         glUniform3f(glGetUniformLocation(shaderProgram.ID, "lightPos"), 20.0f, 40.0f, 20.0f);
 
+
+        // Sun position & lighting
+        glUniform3f(glGetUniformLocation(shaderProgram.ID, "lightPos"), sunPos.x, sunPos.y, sunPos.z);
+
         // Ground Plane
         glm::mat4 ground = glm::scale(glm::mat4(1.0f), glm::vec3(70.0f, 0.1f, 70.0f));
         drawCube(shaderProgram, VAO1, ground, glm::vec3(0.25f, 0.55f, 0.22f));
 
+
+        //==================================================
+        //==================================================
+
+
+      // Ground Plane
+        glm::mat4 ground2 = glm::scale(glm::mat4(1.0f), glm::vec3(150.0f, 0.1f, 150.0f));
+        drawCube(shaderProgram, VAO1, ground2, glm::vec3(0.25f, 0.55f, 0.22f));
+
+        //sun===================================================
+      // Draw Sun (Only visible brightly during Day mode)
+        glm::mat4 sunModel = glm::translate(glm::mat4(1.0f), sunPos);
+        sunModel = glm::scale(sunModel, glm::vec3(2.5f, 2.5f, 2.5f));
+        glm::vec3 sunColor = isDayMode ? glm::vec3(1.0f, 0.95f, 0.2f) : glm::vec3(0.4f, 0.4f, 0.5f);
+        drawCube(shaderProgram, VAO1, sunModel, sunColor);
+        //=============================================================
+
+        // Draw red dot at every (X, Z) coordinate step of 2.0 units
+        drawXZRedDots(shaderProgram, VAO1, 35.0f, 2.0f);
+
+
+        //=================================================
+        //=================================================
+
         // Academic Blocks
-        drawFourConnectedBlocks(shaderProgram, VAO1, 12.0f);
+        drawFourConnectedBlocks(shaderProgram, VAO1, 15.0f);
 
         // Halls
         drawSSHAKH(shaderProgram, VAO1, -22.0f, -5.0f, 12.0f, 12.0f, 5.83f, 1.5f, glm::vec3(0.80f, 0.70f, 0.60f)); // AEH
@@ -1815,10 +2028,17 @@ int main() {
         float treeZ[] = { -22.0f, -14.0f, -6.0f, 2.0f, 10.0f, 18.0f };
         for (float z : treeZ) {
             drawTree(shaderProgram, VAO1, -3.2f, z);
-            drawTree(shaderProgram, VAO1, 5.8f, z);
+            drawTree(shaderProgram, VAO1, 8.8f, z);
         }
         drawTree(shaderProgram, VAO1, 16.0f, 22.0f);
         drawTree(shaderProgram, VAO1, 16.0f, 31.0f);
+
+
+        float lightZ[] = { -25.0f, -10.0f, 2.0f, 14.0f, 26.0f };
+        for (float z : lightZ) {
+            drawStreetLightPost(shaderProgram, VAO1, -0.5f, z, spotlightOn); // Left road side
+            drawStreetLightPost(shaderProgram, VAO1, 7.5f, z, spotlightOn); // Right road side
+        }
 
      
 
@@ -1857,9 +2077,39 @@ int main() {
       // drawURPBuilding(shaderProgram, VAO1, -12.0f, 0.0f, -5.0f, 1.0f);
 
 
+        // 2. Create an on-screen control window
+        ImGui::Begin("Shading Controls");
+        ImGui::Text("Select Shading Mode:");
+
+        if (ImGui::Button("Flat Shading")) {
+            currentShadingMode = 0;
+        }
+        if (ImGui::Button("Gouraud Shading")) {
+            currentShadingMode = 1;
+        }
+        if (ImGui::Button("Phong Shading")) {
+            currentShadingMode = 2;
+        }
+
+        ImGui::Separator();
+        // Display active mode status
+        const char* modeStrs[] = { "Flat", "Gouraud", "Phong" };
+        ImGui::Text("Active: %s", modeStrs[currentShadingMode]);
+        ImGui::End();
+
+        // 3. Render ImGui draw data (place this near the end of the loop, right before glfwSwapBuffers)
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
+
+    // Cleanup ImGui
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
 
     VAO1.Delete();
     VBO1.Delete();
