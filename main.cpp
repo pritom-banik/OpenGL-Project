@@ -29,11 +29,16 @@ float lastY = height / 2.0f;
 bool isDragging = false;
 bool firstMouse = true;
 // Global spotlight state
-bool spotlightOn = false;
+bool spotlightOn = true;
 // Global shading mode tracker (0 = Flat, 1 = Gouraud, 2 = Phong)
 int currentShadingMode = 2;
 // Global Mode Tracker
-bool isDayMode = false;
+bool isDayMode = true;
+bool pointLightOn = true;
+bool directionalLightOn = true;
+bool areaLightOn = true;
+bool shadowsOn = true;
+bool hallWindowLightsOn = false;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
@@ -95,7 +100,6 @@ void processInput(GLFWwindow* window) {
         glfwSetWindowShouldClose(window, true);
 
     // Keyboard rotation & height controls directly adjust camera angles/radius
-    float rotateSpeed = 1.0f;
     //if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
     //    yaw -= rotateSpeed;
     //if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
@@ -119,6 +123,17 @@ void processInput(GLFWwindow* window) {
         lKeyPressed = false;
     }
 
+    static bool hKeyPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS) {
+        if (!hKeyPressed) {
+            hallWindowLightsOn = !hallWindowLightsOn;
+            hKeyPressed = true;
+        }
+    }
+    else if (glfwGetKey(window, GLFW_KEY_H) == GLFW_RELEASE) {
+        hKeyPressed = false;
+    }
+
 
     //=============================================================
 
@@ -132,8 +147,6 @@ void processInput(GLFWwindow* window) {
 
     if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) {
         if (!wPressed) { currentShadingMode = 1; wPressed = true; }
-        // Allows pitch adjustment while holding W without re-triggering mode every frame
-        pitch = std::min(pitch + rotateSpeed, 89.0f);
     }
     else { wPressed = false; }
 
@@ -189,12 +202,80 @@ GLfloat vertices[] = {
      -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
 };
 
-void drawCube(Shader& shaderProgram, VAO& vao, glm::mat4 model, glm::vec3 color) {
+void drawCube(Shader& shaderProgram, VAO& vao, glm::mat4 model, glm::vec3 color, bool emissive = false) {
     glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
     glUniform3f(glGetUniformLocation(shaderProgram.ID, "objectColor"), color.x, color.y, color.z);
+    glUniform1f(glGetUniformLocation(shaderProgram.ID, "objectAlpha"), 1.0f);
+    glUniform1i(glGetUniformLocation(shaderProgram.ID, "emissiveObject"), emissive ? 1 : 0);
 
     vao.Bind();
     glDrawArrays(GL_TRIANGLES, 0, 36);
+}
+
+void drawSphere(Shader& shaderProgram, glm::mat4 model, glm::vec3 color, float opacity, bool emissive) {
+    static GLuint sphereVAO = 0;
+    static GLsizei vertexCount = 0;
+
+    if (sphereVAO == 0) {
+        const int stacks = 16;
+        const int sectors = 24;
+        std::vector<GLfloat> sphereVertices;
+
+        auto appendVertex = [&](glm::vec3 normal) {
+            sphereVertices.insert(sphereVertices.end(), {
+                normal.x, normal.y, normal.z,
+                normal.x, normal.y, normal.z
+            });
+        };
+
+        for (int stack = 0; stack < stacks; ++stack) {
+            float phi0 = -glm::half_pi<float>() + glm::pi<float>() * stack / stacks;
+            float phi1 = -glm::half_pi<float>() + glm::pi<float>() * (stack + 1) / stacks;
+            for (int sector = 0; sector < sectors; ++sector) {
+                float theta0 = 2.0f * glm::pi<float>() * sector / sectors;
+                float theta1 = 2.0f * glm::pi<float>() * (sector + 1) / sectors;
+                glm::vec3 p00(std::cos(phi0) * std::cos(theta0), std::sin(phi0), std::cos(phi0) * std::sin(theta0));
+                glm::vec3 p10(std::cos(phi1) * std::cos(theta0), std::sin(phi1), std::cos(phi1) * std::sin(theta0));
+                glm::vec3 p01(std::cos(phi0) * std::cos(theta1), std::sin(phi0), std::cos(phi0) * std::sin(theta1));
+                glm::vec3 p11(std::cos(phi1) * std::cos(theta1), std::sin(phi1), std::cos(phi1) * std::sin(theta1));
+                appendVertex(p00); appendVertex(p10); appendVertex(p01);
+                appendVertex(p01); appendVertex(p10); appendVertex(p11);
+            }
+        }
+
+        vertexCount = static_cast<GLsizei>(sphereVertices.size() / 6);
+        GLuint sphereVBO = 0;
+        glGenVertexArrays(1, &sphereVAO);
+        glGenBuffers(1, &sphereVBO);
+        glBindVertexArray(sphereVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, sphereVBO);
+        glBufferData(GL_ARRAY_BUFFER, sphereVertices.size() * sizeof(GLfloat), sphereVertices.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+        glEnableVertexAttribArray(1);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+    }
+
+    glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    glUniform3f(glGetUniformLocation(shaderProgram.ID, "objectColor"), color.x, color.y, color.z);
+    glUniform1f(glGetUniformLocation(shaderProgram.ID, "objectAlpha"), opacity);
+    glUniform1i(glGetUniformLocation(shaderProgram.ID, "emissiveObject"), emissive ? 1 : 0);
+    if (opacity < 1.0f) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE);
+    }
+    glBindVertexArray(sphereVAO);
+    glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+    glBindVertexArray(0);
+    if (opacity < 1.0f) {
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+    }
+    glUniform1f(glGetUniformLocation(shaderProgram.ID, "objectAlpha"), 1.0f);
+    glUniform1i(glGetUniformLocation(shaderProgram.ID, "emissiveObject"), 0);
 }
 
 
@@ -776,12 +857,13 @@ void drawFourConnectedBlocks(Shader& shaderProgram, VAO& vao, float xOffset) {
     drawBuildingExtension(shaderProgram, vao, xOffset, zPositions[3]);
 }
 
-void drawFFHDRH(Shader& shader, VAO& vao, float x, float z, float w, float d, float h, float wallThick, glm::vec3 color) {
+void drawFFHDRH(Shader& shader, VAO& vao, float x, float z, float w, float d, float h, float wallThick, glm::vec3 color, bool windowsLit = false) {
     // Architectural Color Palette
     glm::vec3 pinkWall(0.88f, 0.68f, 0.72f);      // Main facade plaster
     glm::vec3 whiteTrim(0.93f, 0.93f, 0.90f);     // Concrete pillars, ledges & parapets
     glm::vec3 darkBase(0.25f, 0.22f, 0.20f);      // Plinth ground base
     glm::vec3 windowGlass(0.18f, 0.22f, 0.28f);   // Dark recessed window glass
+    glm::vec3 windowColor = windowsLit ? glm::vec3(1.0f, 0.62f, 0.26f) : windowGlass;
     glm::vec3 doorColor(0.12f, 0.12f, 0.14f);     // Entrance doorway frame
 
     float h1 = h / 3.0f; // Height of 1-story section
@@ -823,7 +905,7 @@ void drawFFHDRH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
         float winX = (southWallCenterX - southWallWidth / 2.0f) + i * stepSouthWin;
         glm::mat4 win = glm::translate(glm::mat4(1.0f), glm::vec3(winX, h1 * 0.55f, southZ + wallThick / 2.0f + 0.02f));
         win = glm::scale(win, glm::vec3(stepSouthWin * 0.45f, h1 * 0.40f, 0.05f));
-        drawCube(shader, vao, win, windowGlass);
+        drawCube(shader, vao, win, windowColor, windowsLit);
     }
 
     // =========================================================================
@@ -930,7 +1012,7 @@ void drawFFHDRH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
         // West Wing South End Window
         glm::mat4 winW = glm::translate(glm::mat4(1.0f), glm::vec3(westX, winY, southZ + wallThick / 2.0f + 0.02f));
         winW = glm::scale(winW, glm::vec3(wallThick * 0.60f, h1 * 0.40f, 0.05f));
-        drawCube(shader, vao, winW, windowGlass);
+        drawCube(shader, vao, winW, windowColor, windowsLit);
 
        
     }
@@ -947,7 +1029,7 @@ void drawFFHDRH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
     float winY_North = h1 * 0.55f;
     glm::mat4 winN1 = glm::translate(glm::mat4(1.0f), glm::vec3(x, winY_North, northZ + wallThick / 2.0f + 0.02f));
     winN1 = glm::scale(winN1, glm::vec3(5.0f, h1 * 0.50f, 0.05f));
-    drawCube(shader, vao, winN1, windowGlass);
+    drawCube(shader, vao, winN1, windowColor, windowsLit);
 
    
 
@@ -966,7 +1048,7 @@ void drawFFHDRH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
             float winZ = (z - sideWingDepth / 2.0f + stepZ / 2.0f) + b * stepZ;
             glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerWestX, winY, winZ));
             winMat = glm::scale(winMat, glm::vec3(0.05f, h1 * 0.40f, stepZ * 0.55f));
-            drawCube(shader, vao, winMat, windowGlass);
+            drawCube(shader, vao, winMat, windowColor, windowsLit);
         }
     }
 
@@ -978,7 +1060,7 @@ void drawFFHDRH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
             float winZ = (z - sideWingDepth / 2.0f + stepZ / 2.0f) + b * stepZ;
             glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerEastX_Wall, winY, winZ));
             winMat = glm::scale(winMat, glm::vec3(0.05f, h1 * 0.40f, stepZ * 0.55f));
-            drawCube(shader, vao, winMat, windowGlass);
+            drawCube(shader, vao, winMat, windowColor, windowsLit);
         }
     }
 
@@ -991,7 +1073,7 @@ void drawFFHDRH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
         float winX = (x - (w - 2.0f * wallThick) / 2.0f + stepX / 2.0f) + b * stepX;
         glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(winX, winY_Ground, outerNorthZ-wallThick));
         winMat = glm::scale(winMat, glm::vec3(stepX * 0.55f, h1 * 0.40f, 0.05f));
-        drawCube(shader, vao, winMat, windowGlass);
+        drawCube(shader, vao, winMat, windowColor, windowsLit);
     }
 
 
@@ -1020,7 +1102,7 @@ void drawFFHDRH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
         float winY = (f * h1) + (h1 * 0.55f);
         glm::mat4 winWestInner = glm::translate(glm::mat4(1.0f), glm::vec3(innerWestX, winY, z));
         winWestInner = glm::scale(winWestInner, glm::vec3(0.05f, h1 * 0.50f, sideWingDepth+1.5f ));
-        drawCube(shader, vao, winWestInner, windowGlass);
+        drawCube(shader, vao, winWestInner, windowColor, windowsLit);
     }
 
     // -------------------------------------------------------------------------
@@ -1038,19 +1120,20 @@ void drawFFHDRH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
         float winY = (f * h1) + (h1 * 0.55f);
         glm::mat4 winEastInner = glm::translate(glm::mat4(1.0f), glm::vec3(innerEastX, winY, z));
         winEastInner = glm::scale(winEastInner, glm::vec3(0.05f, h1 * 0.50f, sideWingDepth ));
-        drawCube(shader, vao, winEastInner, windowGlass);
+        drawCube(shader, vao, winEastInner, windowColor, windowsLit);
     }
 
 }
 
 
 
-void drawSSHAKH(Shader& shader, VAO& vao, float x, float z, float w, float d, float h, float wallThick, glm::vec3 color) {
+void drawSSHAKH(Shader& shader, VAO& vao, float x, float z, float w, float d, float h, float wallThick, glm::vec3 color, bool windowsLit = false) {
     // Architectural Color Palette
     glm::vec3 pinkWall(0.88f, 0.68f, 0.72f);      // Main facade plaster
     glm::vec3 whiteTrim(0.93f, 0.93f, 0.90f);     // Concrete pillars, ledges & parapets
     glm::vec3 darkBase(0.25f, 0.22f, 0.20f);      // Plinth ground base
     glm::vec3 windowGlass(0.18f, 0.22f, 0.28f);   // Dark recessed window glass
+    glm::vec3 windowColor = windowsLit ? glm::vec3(1.0f, 0.62f, 0.26f) : windowGlass;
     glm::vec3 doorColor(0.12f, 0.12f, 0.14f);     // Entrance doorway frame
 
     float h1 = h / 5.0f; // Height of 1-story section
@@ -1197,7 +1280,7 @@ void drawSSHAKH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
             float winZ = (z - sideWingDepth / 2.0f + stepZ / 2.0f) + b * stepZ;
             glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerWestX, winY, winZ));
             winMat = glm::scale(winMat, glm::vec3(0.05f, h1 * 0.40f, stepZ * 0.55f));
-            drawCube(shader, vao, winMat, windowGlass);
+            drawCube(shader, vao, winMat, windowColor, windowsLit);
         }
 
         // Outer East Wall (+X) Windows (Skipping middle bay for door)
@@ -1207,7 +1290,7 @@ void drawSSHAKH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
             if (std::abs(winZ - z) > entryLengthZ * 0.6f || floor > 0) { // Keep windows on upper floors or away from entrance
                 glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerEastX_Wall, winY, winZ));
                 winMat = glm::scale(winMat, glm::vec3(0.05f, h1 * 0.40f, stepZ * 0.55f));
-                drawCube(shader, vao, winMat, windowGlass);
+                drawCube(shader, vao, winMat, windowColor, windowsLit);
             }
         }
 
@@ -1217,7 +1300,7 @@ void drawSSHAKH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
             float winX = (x - wingWidth / 2.0f + stepX / 2.0f) + b * stepX;
             glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(winX, winY, outerNorthZ));
             winMat = glm::scale(winMat, glm::vec3(stepX * 0.55f, h1 * 0.40f, 0.05f));
-            drawCube(shader, vao, winMat, windowGlass);
+            drawCube(shader, vao, winMat, windowColor, windowsLit);
         }
 
         // Outer South Wall (+Z) Windows
@@ -1226,7 +1309,7 @@ void drawSSHAKH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
             float winX = (x - wingWidth / 2.0f + stepX / 2.0f) + b * stepX;
             glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(winX, winY, outerSouthZ));
             winMat = glm::scale(winMat, glm::vec3(stepX * 0.55f, h1 * 0.40f, 0.05f));
-            drawCube(shader, vao, winMat, windowGlass);
+            drawCube(shader, vao, winMat, windowColor, windowsLit);
         }
     }
 
@@ -1251,7 +1334,7 @@ void drawSSHAKH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
         float winY = (f * h1) + (h1 * 0.55f);
         glm::mat4 winWestInner = glm::translate(glm::mat4(1.0f), glm::vec3(innerWestX, winY, z));
         winWestInner = glm::scale(winWestInner, glm::vec3(0.05f, h1 * 0.50f, sideWingDepth * 0.75f));
-        drawCube(shader, vao, winWestInner, windowGlass);
+        drawCube(shader, vao, winWestInner, windowColor, windowsLit);
     }
 
     // --- East Inner Wall ---
@@ -1264,7 +1347,7 @@ void drawSSHAKH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
         float winY = (f * h1) + (h1 * 0.55f);
         glm::mat4 winEastInner = glm::translate(glm::mat4(1.0f), glm::vec3(innerEastX, winY, z));
         winEastInner = glm::scale(winEastInner, glm::vec3(0.05f, h1 * 0.50f, sideWingDepth * 0.75f));
-        drawCube(shader, vao, winEastInner, windowGlass);
+        drawCube(shader, vao, winEastInner, windowColor, windowsLit);
     }
 
     // --- North Inner Wall ---
@@ -1277,7 +1360,7 @@ void drawSSHAKH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
         float winY = (f * h1) + (h1 * 0.55f);
         glm::mat4 winNorthInner = glm::translate(glm::mat4(1.0f), glm::vec3(x, winY, innerNorthZ));
         winNorthInner = glm::scale(winNorthInner, glm::vec3(wingWidth * 0.75f, h1 * 0.50f, 0.05f));
-        drawCube(shader, vao, winNorthInner, windowGlass);
+        drawCube(shader, vao, winNorthInner, windowColor, windowsLit);
     }
 
     // --- South Inner Wall ---
@@ -1290,18 +1373,395 @@ void drawSSHAKH(Shader& shader, VAO& vao, float x, float z, float w, float d, fl
         float winY = (f * h1) + (h1 * 0.55f);
         glm::mat4 winSouthInner = glm::translate(glm::mat4(1.0f), glm::vec3(x, winY, innerSouthZ));
         winSouthInner = glm::scale(winSouthInner, glm::vec3(wingWidth * 0.75f, h1 * 0.50f, 0.05f));
-        drawCube(shader, vao, winSouthInner, windowGlass);
+        drawCube(shader, vao, winSouthInner, windowColor, windowsLit);
     }
 }
 
+
+void drawLSH(Shader& shader, VAO& vao, float x, float z, float w, float d, float h, float wallThick, glm::vec3 color, bool windowsLit = false) {
+    // Architectural Color Palette
+    glm::vec3 pinkWall(0.88f, 0.68f, 0.72f);      // Main facade plaster
+    glm::vec3 whiteTrim(0.93f, 0.93f, 0.90f);     // Concrete pillars, ledges & parapets
+    glm::vec3 darkBase(0.25f, 0.22f, 0.20f);      // Plinth ground base
+    glm::vec3 windowGlass(0.18f, 0.22f, 0.28f);   // Dark recessed window glass
+    glm::vec3 windowColor = windowsLit ? glm::vec3(1.0f, 0.62f, 0.26f) : windowGlass;
+    glm::vec3 doorColor(0.12f, 0.12f, 0.14f);     // Entrance doorway frame
+
+    float h1 = h / 5.0f; // Height of 1-story section
+
+    // Wall Center Coordinates
+    float northZ = z - d / 2.0f + wallThick / 2.0f; // North Wall (-Z)
+    float southZ = z + d / 2.0f - wallThick / 2.0f; // South Wall (+Z)
+    float westX  = x - w / 2.0f + wallThick / 2.0f; // West Wall (-X)
+    float eastX  = x + w / 2.0f - wallThick / 2.0f; // East Wall (+X)
+
+    float wingDepth = d - 2.0f * wallThick;
+    float wingWidth = w - 2.0f * wallThick;
+
+    // =========================================================================
+    // 1. MAIN BUILDING BLOCK (5 STORIES FULL HEIGHT)
+    // =========================================================================
+    glm::mat4 building = glm::translate(glm::mat4(1.0f), glm::vec3(x, h / 2.0f, z));
+    building = glm::scale(building, glm::vec3(w, h, d));
+    drawCube(shader, vao, building, pinkWall);
+
+    // Plinth Base
+    glm::mat4 base = glm::translate(glm::mat4(1.0f), glm::vec3(x, 0.15f, z));
+    base = glm::scale(base, glm::vec3(w + 0.05f, 0.30f, d + 0.05f));
+    drawCube(shader, vao, base, darkBase);
+
+    // Roof Parapet Cap
+    glm::mat4 roof = glm::translate(glm::mat4(1.0f), glm::vec3(x, h + 0.10f, z));
+    roof = glm::scale(roof, glm::vec3(w + 0.10f, 0.20f, d + 0.10f));
+    drawCube(shader, vao, roof, whiteTrim);
+
+    // =========================================================================
+    // 2. ENTRY POINT AT NORTH-WEST CORNER FACING WEST (-X) WITH STAIRS
+    // =========================================================================
+    float entryLengthZ = wallThick * 1.0f;       // Entry width along Z-axis
+    float entryZ = northZ;                       // North-West corner position along Z
+    float outerWestX = westX - wallThick / 2.0f; // Outer face of West wall
+
+    // Entrance Door Canopy
+    glm::mat4 canopy = glm::translate(glm::mat4(1.0f), glm::vec3(outerWestX - 0.30f, h1 * 0.85f, entryZ));
+    canopy = glm::scale(canopy, glm::vec3(0.70f, 0.15f, entryLengthZ * 0.90f));
+    drawCube(shader, vao, canopy, whiteTrim);
+
+    // Entrance Doorway Opening Frame
+    glm::mat4 doorMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerWestX, h1 * 0.40f, entryZ));
+    doorMat = glm::scale(doorMat, glm::vec3(0.06f, h1 * 0.70f, entryLengthZ * 0.70f));
+    drawCube(shader, vao, doorMat, doorColor);
+
+    // Multi-Step Entrance Stairs (Facing -X)
+    int numSteps = 5;
+    for (int s = 0; s < numSteps; s++) {
+        float stepY = (s * 0.06f) + 0.03f;
+        float stepDepth = 0.25f + (numSteps - s) * 0.15f;
+        glm::mat4 stepMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerWestX - stepDepth / 2.0f, stepY, entryZ));
+        stepMat = glm::scale(stepMat, glm::vec3(stepDepth, 0.06f, entryLengthZ * 0.85f));
+        drawCube(shader, vao, stepMat, whiteTrim);
+    }
+
+    // =========================================================================
+    // 3. FACADE LEDGES & EXTERNAL WINDOWS (5 FLOORS)
+    // =========================================================================
+    // Horizontal Ledges for 5 Floors
+    for (int floor = 1; floor <= 5; floor++) {
+        float ledgeY = floor * h1;
+
+        // West Outer Ledge
+        glm::mat4 lW = glm::translate(glm::mat4(1.0f), glm::vec3(westX - wallThick / 2.0f - 0.02f, ledgeY, z));
+        lW = glm::scale(lW, glm::vec3(0.08f, 0.12f, d));
+        drawCube(shader, vao, lW, whiteTrim);
+
+        // East Outer Ledge
+        glm::mat4 lE = glm::translate(glm::mat4(1.0f), glm::vec3(eastX + wallThick / 2.0f + 0.02f, ledgeY, z));
+        lE = glm::scale(lE, glm::vec3(0.08f, 0.12f, d));
+        drawCube(shader, vao, lE, whiteTrim);
+
+        // North Outer Ledge
+        glm::mat4 lN = glm::translate(glm::mat4(1.0f), glm::vec3(x, ledgeY, northZ - wallThick / 2.0f - 0.02f));
+        lN = glm::scale(lN, glm::vec3(w, 0.12f, 0.08f));
+        drawCube(shader, vao, lN, whiteTrim);
+
+        // South Outer Ledge
+        glm::mat4 lS = glm::translate(glm::mat4(1.0f), glm::vec3(x, ledgeY, southZ + wallThick / 2.0f + 0.02f));
+        lS = glm::scale(lS, glm::vec3(w, 0.12f, 0.08f));
+        drawCube(shader, vao, lS, whiteTrim);
+    }
+
+    // -------------------------------------------------------------------------
+    // Outer Windows (5 Floors)
+    // -------------------------------------------------------------------------
+    int baysZ = 6;
+    float stepZ = wingDepth / (float)baysZ;
+
+    int baysX = 6;
+    float stepX = wingWidth / (float)baysX;
+
+    for (int floor = 0; floor < 5; floor++) {
+        float winY = (floor * h1) + (h1 * 0.55f);
+
+        // Outer West Wall (-X) Windows (Skipping entry bay at North-West corner on ground floor)
+        float outerWestX_Wall = westX - wallThick / 2.0f - 0.02f;
+        for (int b = 0; b < baysZ; b++) {
+            float winZ = (z - wingDepth / 2.0f + stepZ / 2.0f) + b * stepZ;
+            if (std::abs(winZ - entryZ) > entryLengthZ * 0.6f || floor > 0) {
+                glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerWestX_Wall, winY, winZ));
+                winMat = glm::scale(winMat, glm::vec3(0.05f, h1 * 0.40f, stepZ * 0.55f));
+                drawCube(shader, vao, winMat, windowColor, windowsLit);
+            }
+        }
+
+        // Outer East Wall (+X) Windows
+        float outerEastX_Wall = eastX + wallThick / 2.0f + 0.02f;
+        for (int b = 0; b < baysZ; b++) {
+            float winZ = (z - wingDepth / 2.0f + stepZ / 2.0f) + b * stepZ;
+            glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(outerEastX_Wall, winY, winZ));
+            winMat = glm::scale(winMat, glm::vec3(0.05f, h1 * 0.40f, stepZ * 0.55f));
+            drawCube(shader, vao, winMat, windowColor, windowsLit);
+        }
+
+        // Outer North Wall (-Z) Windows
+        float outerNorthZ = northZ - wallThick / 2.0f - 0.02f;
+        for (int b = 0; b < baysX; b++) {
+            float winX = (x - wingWidth / 2.0f + stepX / 2.0f) + b * stepX;
+            glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(winX, winY, outerNorthZ));
+            winMat = glm::scale(winMat, glm::vec3(stepX * 0.55f, h1 * 0.40f, 0.05f));
+            drawCube(shader, vao, winMat, windowColor, windowsLit);
+        }
+
+        // Outer South Wall (+Z) Windows
+        float outerSouthZ = southZ + wallThick / 2.0f + 0.02f;
+        for (int b = 0; b < baysX; b++) {
+            float winX = (x - wingWidth / 2.0f + stepX / 2.0f) + b * stepX;
+            glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(winX, winY, outerSouthZ));
+            winMat = glm::scale(winMat, glm::vec3(stepX * 0.55f, h1 * 0.40f, 0.05f));
+            drawCube(shader, vao, winMat, windowColor, windowsLit);
+        }
+    }
+}
+
+
+void drawBRH(Shader& shader, VAO& vao, float x, float z, float w, float d, float h, float wallThick, glm::vec3 color, bool windowsLit = false) {
+    // Architectural Color Palette
+    glm::vec3 pinkWall(0.88f, 0.68f, 0.72f);      // Main facade plaster
+    glm::vec3 whiteTrim(0.93f, 0.93f, 0.90f);     // Concrete pillars, ledges & parapets
+    glm::vec3 darkBase(0.25f, 0.22f, 0.20f);      // Plinth ground base
+    glm::vec3 windowGlass(0.18f, 0.22f, 0.28f);   // Dark recessed window glass
+    glm::vec3 windowColor = windowsLit ? glm::vec3(1.0f, 0.62f, 0.26f) : windowGlass;
+    glm::vec3 doorColor(0.12f, 0.12f, 0.14f);     // Entrance doorway frame
+
+    float h1 = h / 3.0f; // Height of 1-story section
+
+    // Wall Center Coordinates
+    float northZ = z - d / 2.0f + wallThick / 2.0f; // North Wall (-Z)
+    float southZ = z + d / 2.0f - wallThick / 2.0f; // South Wall (+Z)
+    float westX  = x - w / 2.0f + wallThick / 2.0f; // West Wall (-X)
+    float eastX  = x + w / 2.0f - wallThick / 2.0f; // East Wall (+X)
+
+    float sideWingDepth = d - 2.0f * wallThick;
+
+    // 180-degree rotation helpers around building center (x, z)
+    auto rotX = [&](float px) { return 2.0f * x - px; };
+    auto rotZ = [&](float pz) { return 2.0f * z - pz; };
+
+    // =========================================================================
+    // 1. 1-STORY WING (Rotated 180°)
+    // =========================================================================
+    float entryWidth = wallThick; 
+    float southWallWidth = w - entryWidth;
+    float southWallCenterX = x + entryWidth / 2.0f;
+
+    // 1-Story Wall Body
+    glm::mat4 southWing = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(southWallCenterX), h1 / 2.0f, rotZ(southZ)));
+    southWing = glm::scale(southWing, glm::vec3(southWallWidth, h1, wallThick));
+    drawCube(shader, vao, southWing, pinkWall);
+
+    // Plinth Base
+    glm::mat4 baseS = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(southWallCenterX), 0.15f, rotZ(southZ)));
+    baseS = glm::scale(baseS, glm::vec3(southWallWidth + 0.05f, 0.30f, wallThick + 0.05f));
+    drawCube(shader, vao, baseS, darkBase);
+
+    // Parapet Cap
+    glm::mat4 roofS1 = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(southWallCenterX), h1 + 0.10f, rotZ(southZ)));
+    roofS1 = glm::scale(roofS1, glm::vec3(southWallWidth, 0.20f, wallThick + 0.08f));
+    drawCube(shader, vao, roofS1, whiteTrim);
+
+    // Ground Floor Windows
+    int numSouthWins = 3;
+    float stepSouthWin = southWallWidth / (float)(numSouthWins + 1);
+    for (int i = 1; i <= numSouthWins; i++) {
+        float winX = southWallCenterX - southWallWidth / 2.0f + i * stepSouthWin;
+        glm::mat4 win = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(winX), h1 * 0.55f, rotZ(southZ + wallThick / 2.0f + 0.02f)));
+        win = glm::scale(win, glm::vec3(stepSouthWin * 0.45f, h1 * 0.40f, 0.05f));
+        drawCube(shader, vao, win, windowColor, windowsLit);
+    }
+
+    // =========================================================================
+    // 2. ENTRY POINT (Rotated 180°)
+    // =========================================================================
+    float entryLengthZ = wallThick;        
+    float entryZ = southZ;                        
+    float outerEastX = eastX - wallThick / 2.0f;  
+
+    // Entrance Door Canopy
+    glm::mat4 canopy = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(outerEastX), h1 * 0.85f, rotZ(entryZ)));
+    canopy = glm::scale(canopy, glm::vec3(0.70f, 0.15f, entryLengthZ * 0.90f));
+    drawCube(shader, vao, canopy, whiteTrim);
+
+    // Entrance Doorway Opening Frame
+    glm::mat4 doorMat = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(outerEastX), h1 * 0.40f, rotZ(entryZ)));
+    doorMat = glm::scale(doorMat, glm::vec3(0.06f, h1 * 0.70f, entryLengthZ * 0.70f));
+    drawCube(shader, vao, doorMat, doorColor);
+
+    // Multi-Step Entrance Stairs
+    int numSteps = 5;
+    for (int s = 0; s < numSteps; s++) {
+        float stepY = (s * 0.06f) + 0.03f;
+        float stepDepth = 0.25f + (numSteps - s) * 0.15f;
+        glm::mat4 stepMat = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(outerEastX + stepDepth / 2.0f), stepY, rotZ(entryZ)));
+        stepMat = glm::scale(stepMat, glm::vec3(stepDepth, 0.06f, entryLengthZ * 0.85f));
+        drawCube(shader, vao, stepMat, whiteTrim);
+    }
+
+    // =========================================================================
+    // 3. MAIN WINGS (Rotated 180°)
+    // =========================================================================
+    glm::mat4 westWing = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(westX), h / 2.0f, rotZ(z)));
+    westWing = glm::scale(westWing, glm::vec3(wallThick, h, sideWingDepth + 2.0f * wallThick));
+    drawCube(shader, vao, westWing, pinkWall);
+
+    glm::mat4 eastWing = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(eastX), h / 2.0f, rotZ(z - wallThick / 2.0f)));
+    eastWing = glm::scale(eastWing, glm::vec3(wallThick, h, sideWingDepth + wallThick));
+    drawCube(shader, vao, eastWing, pinkWall);
+
+    glm::mat4 northWing = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(x - wallThick / 2.0f), h1 / 2.0f, rotZ(northZ - wallThick / 2.0f)));
+    northWing = glm::scale(northWing, glm::vec3(w - wallThick, h1, wallThick + wallThick));
+    drawCube(shader, vao, northWing, pinkWall);
+
+    // Plinth Bases
+    glm::mat4 baseW = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(westX), 0.15f, rotZ(z)));
+    baseW = glm::scale(baseW, glm::vec3(wallThick + 0.05f, 0.30f, sideWingDepth + 2.0f * wallThick));
+    drawCube(shader, vao, baseW, darkBase);
+
+    glm::mat4 baseE = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(eastX), 0.15f, rotZ(z - wallThick / 2.0f)));
+    baseE = glm::scale(baseE, glm::vec3(wallThick + 0.05f, 0.30f, sideWingDepth + wallThick));
+    drawCube(shader, vao, baseE, darkBase);
+
+    glm::mat4 baseN = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(x - wallThick / 2.0f), 0.15f, rotZ(northZ - wallThick / 2.0f)));
+    baseN = glm::scale(baseN, glm::vec3(w - wallThick + 0.05f, 0.30f, wallThick + wallThick + 0.05f));
+    drawCube(shader, vao, baseN, darkBase);
+
+    // Roof Top Parapet Caps
+    glm::mat4 roofW = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(westX), h + 0.10f, rotZ(z)));
+    roofW = glm::scale(roofW, glm::vec3(wallThick + 0.10f, 0.20f, sideWingDepth + 2.0f * wallThick + 0.10f));
+    drawCube(shader, vao, roofW, whiteTrim);
+
+    glm::mat4 roofE = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(eastX), h + 0.10f, rotZ(z - wallThick / 2.0f)));
+    roofE = glm::scale(roofE, glm::vec3(wallThick + 0.10f, 0.20f, sideWingDepth + wallThick + 0.10f));
+    drawCube(shader, vao, roofE, whiteTrim);
+
+    glm::mat4 roofN = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(x - wallThick / 2.0f), h1 + 0.10f, rotZ(northZ - wallThick / 2.0f)));
+    roofN = glm::scale(roofN, glm::vec3(w - wallThick, 0.20f, wallThick + wallThick + 0.10f));
+    drawCube(shader, vao, roofN, whiteTrim);
+
+    // =========================================================================
+    // 4. FACADE DETAILS & WINDOWS
+    // =========================================================================
+    for (int floor = 1; floor <= 3; floor++) {
+        float ledgeY = floor * h1;
+
+        glm::mat4 lW = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(westX - wallThick / 2.0f - 0.02f), ledgeY, rotZ(z)));
+        lW = glm::scale(lW, glm::vec3(0.08f, 0.12f, sideWingDepth + 2.0f * wallThick));
+        drawCube(shader, vao, lW, whiteTrim);
+
+        glm::mat4 lE = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(eastX + wallThick / 2.0f + 0.02f), ledgeY, rotZ(z - wallThick / 2.0f)));
+        lE = glm::scale(lE, glm::vec3(0.08f, 0.12f, sideWingDepth + wallThick));
+        drawCube(shader, vao, lE, whiteTrim);
+    }
+
+    glm::mat4 lN = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(x), h1, rotZ(northZ + wallThick / 2.0f + 0.02f)));
+    lN = glm::scale(lN, glm::vec3(w - 2.0f * wallThick, 0.12f, 0.08f));
+    drawCube(shader, vao, lN, whiteTrim);
+
+    for (int f = 0; f < 3; f++) {
+        float winY = (f * h1) + (h1 * 0.55f);
+        glm::mat4 winW = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(westX), winY, rotZ(southZ + wallThick / 2.0f + 0.02f)));
+        winW = glm::scale(winW, glm::vec3(wallThick * 0.60f, h1 * 0.40f, 0.05f));
+        drawCube(shader, vao, winW, windowColor, windowsLit);
+    }
+
+    float colOffsetsX[2] = { x - w * 0.20f, x + w * 0.20f };
+    for (int c = 0; c < 2; c++) {
+        glm::mat4 colMat = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(colOffsetsX[c]), h1 / 2.0f, rotZ(northZ + wallThick / 2.0f + 0.04f)));
+        colMat = glm::scale(colMat, glm::vec3(0.25f, h1, 0.08f));
+        drawCube(shader, vao, colMat, whiteTrim);
+    }
+
+    float winY_North = h1 * 0.55f;
+    glm::mat4 winN1 = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(x), winY_North, rotZ(northZ + wallThick / 2.0f + 0.02f)));
+    winN1 = glm::scale(winN1, glm::vec3(5.0f, h1 * 0.50f, 0.05f));
+    drawCube(shader, vao, winN1, windowColor, windowsLit);
+
+    // =========================================================================
+    // EXTERNAL WINDOW GRID
+    // =========================================================================
+    int baysZ = 6;
+    float stepZ = sideWingDepth / (float)baysZ;
+
+    float outerWestX = westX - wallThick / 2.0f - 0.02f;
+    for (int floor = 0; floor < 3; floor++) {
+        float winY = (floor * h1) + (h1 * 0.55f);
+        for (int b = 0; b < baysZ; b++) {
+            float winZ = (z - sideWingDepth / 2.0f + stepZ / 2.0f) + b * stepZ;
+            glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(outerWestX), winY, rotZ(winZ)));
+            winMat = glm::scale(winMat, glm::vec3(0.05f, h1 * 0.40f, stepZ * 0.55f));
+            drawCube(shader, vao, winMat, windowColor, windowsLit);
+        }
+    }
+
+    float outerEastX_Wall = eastX + wallThick / 2.0f + 0.02f;
+    for (int floor = 0; floor < 3; floor++) {
+        float winY = (floor * h1) + (h1 * 0.55f);
+        for (int b = 0; b < baysZ; b++) {
+            float winZ = (z - sideWingDepth / 2.0f + stepZ / 2.0f) + b * stepZ;
+            glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(outerEastX_Wall), winY, rotZ(winZ)));
+            winMat = glm::scale(winMat, glm::vec3(0.05f, h1 * 0.40f, stepZ * 0.55f));
+            drawCube(shader, vao, winMat, windowColor, windowsLit);
+        }
+    }
+
+    float outerNorthZ = northZ - wallThick / 2.0f - 0.02f;
+    int baysX = 6;
+    float stepX = (w - 2.0f * wallThick) / (float)baysX;
+    for (int b = 0; b < baysX; b++) {
+        float winX = (x - (w - 2.0f * wallThick) / 2.0f + stepX / 2.0f) + b * stepX;
+        glm::mat4 winMat = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(winX), h1 * 0.50f, rotZ(outerNorthZ - wallThick)));
+        winMat = glm::scale(winMat, glm::vec3(stepX * 0.55f, h1 * 0.40f, 0.05f));
+        drawCube(shader, vao, winMat, windowColor, windowsLit);
+    }
+
+    // =========================================================================
+    // INNER COURTYARD PILLARS & WINDOWS
+    // =========================================================================
+    float innerWestX = westX + wallThick / 2.0f + 0.02f;
+    float innerEastX = eastX - wallThick / 2.0f - 0.02f;
+
+    float colOffsetsZ[4] = { z - sideWingDepth * 0.40f, z + sideWingDepth * 0.40f, z - sideWingDepth * 0.10f, z + sideWingDepth * 0.10f };
+
+    for (int c = 0; c < 4; c++) {
+        glm::mat4 colMat = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(innerWestX + 0.02f), h / 2.0f, rotZ(colOffsetsZ[c])));
+        colMat = glm::scale(colMat, glm::vec3(0.08f, h, 0.1f));
+        drawCube(shader, vao, colMat, whiteTrim);
+    }
+    for (int f = 0; f < 3; f++) {
+        float winY = (f * h1) + (h1 * 0.55f);
+        glm::mat4 winWestInner = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(innerWestX), winY, rotZ(z)));
+        winWestInner = glm::scale(winWestInner, glm::vec3(0.05f, h1 * 0.50f, sideWingDepth + 1.5f));
+        drawCube(shader, vao, winWestInner, windowColor, windowsLit);
+    }
+
+    for (int c = 0; c < 4; c++) {
+        glm::mat4 colMat = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(innerEastX - 0.02f), h / 2.0f, rotZ(colOffsetsZ[c])));
+        colMat = glm::scale(colMat, glm::vec3(0.08f, h, 0.1f));
+        drawCube(shader, vao, colMat, whiteTrim);
+    }
+    for (int f = 0; f < 3; f++) {
+        float winY = (f * h1) + (h1 * 0.55f);
+        glm::mat4 winEastInner = glm::translate(glm::mat4(1.0f), glm::vec3(rotX(innerEastX), winY, rotZ(z)));
+        winEastInner = glm::scale(winEastInner, glm::vec3(0.05f, h1 * 0.50f, sideWingDepth));
+        drawCube(shader, vao, winEastInner, windowColor, windowsLit);
+    }
+}
 
 //============================================================================================
 void drawRoads(Shader& shaderProgram, VAO& vao) {
     glm::vec3 asphalt(0.25f, 0.25f, 0.25f);
     glm::vec3 stripeColor(0.95f, 0.85f, 0.10f);
 
-    glm::mat4 mainRoad = glm::translate(glm::mat4(1.0f), glm::vec3(3.5f, 0.05f, 0.0f));
-    mainRoad = glm::scale(mainRoad, glm::vec3(7.0f, 0.02f, 60.0f));
+    glm::mat4 mainRoad = glm::translate(glm::mat4(1.0f), glm::vec3(3.5f, 0.05f, 13.0f));
+    mainRoad = glm::scale(mainRoad, glm::vec3(7.0f, 0.02f, 66.0f));
     drawCube(shaderProgram, vao, mainRoad, asphalt);
 
     for (float z = -28.0f; z <= 28.0f; z += 4.0f) {
@@ -1310,21 +1770,54 @@ void drawRoads(Shader& shaderProgram, VAO& vao) {
         drawCube(shaderProgram, vao, stripe, stripeColor);
     }
 
-    glm::mat4 roadHall2 = glm::translate(glm::mat4(1.0f), glm::vec3(-10.0f, 0.05f, -18.0f));
-    roadHall2 = glm::scale(roadHall2, glm::vec3(20.0f, 0.02f, 2.5f));
-    drawCube(shaderProgram, vao, roadHall2, asphalt);
 
-    glm::mat4 roadHall1_3 = glm::translate(glm::mat4(1.0f), glm::vec3(-10.0f, 0.05f, 6.0f));
-    roadHall1_3 = glm::scale(roadHall1_3, glm::vec3(20.0f, 0.02f, 2.5f));
-    drawCube(shaderProgram, vao, roadHall1_3, asphalt);
+    //back road
+    glm::mat4 backmainRoad = glm::translate(glm::mat4(1.0f), glm::vec3(21.0f, 0.05f, 0.0f));
+    backmainRoad = glm::scale(backmainRoad, glm::vec3(3.0f, 0.02f, 60.0f));
+    drawCube(shaderProgram, vao, backmainRoad, asphalt);
 
-    glm::mat4 roadHall4 = glm::translate(glm::mat4(1.0f), glm::vec3(-9.0f, 0.05f, 21.0f));
-    roadHall4 = glm::scale(roadHall4, glm::vec3(18.0f, 0.02f, 2.5f));
-    drawCube(shaderProgram, vao, roadHall4, asphalt);
+    for (float z = -28.0f; z <= 28.0f; z += 4.0f) {
+        glm::mat4 backstripe = glm::translate(glm::mat4(1.0f), glm::vec3(21.0f, 0.07f, z));
+        backstripe = glm::scale(backstripe, glm::vec3(0.2f, 0.02f, 2.0f));
+        drawCube(shaderProgram, vao, backstripe, stripeColor);
+    }
 
-    glm::mat4 connectRoad = glm::translate(glm::mat4(1.0f), glm::vec3(-12.0f, 0.05f, 13.5f));
-    connectRoad = glm::scale(connectRoad, glm::vec3(2.5f, 0.02f, 17.5f));
-    drawCube(shaderProgram, vao, connectRoad, asphalt);
+    //Connected road
+
+    glm::mat4 connectedroad = glm::translate(glm::mat4(1.0f), glm::vec3(14.0f, 0.05f, -17.0f));
+    connectedroad = glm::scale(connectedroad, glm::vec3(14.0f, 0.02f, 5.2f));
+    drawCube(shaderProgram, vao, connectedroad, asphalt);
+
+
+    glm::mat4 connectedroad2 = glm::translate(glm::mat4(1.0f), glm::vec3(14.0f, 0.05f, 26.0f));
+    connectedroad2 = glm::scale(connectedroad2, glm::vec3(14.0f, 0.02f, 5.2f));
+    drawCube(shaderProgram, vao, connectedroad2, asphalt);
+
+
+    glm::mat4 academicroad = glm::translate(glm::mat4(1.0f), glm::vec3(14.0f, 0.05f, 12.0f));
+    academicroad = glm::scale(academicroad, glm::vec3(14.0f, 0.02f, 2.2f));
+    drawCube(shaderProgram, vao, academicroad, asphalt);
+
+    //=======================================
+
+    glm::mat4 ffhroad = glm::translate(glm::mat4(1.0f), glm::vec3(-4.0f, 0.05f, 7.0f));
+    ffhroad = glm::scale(ffhroad, glm::vec3(9.0f, 0.02f, 2.0f));
+    drawCube(shaderProgram, vao, ffhroad, asphalt);
+
+
+    glm::mat4 drhroad = glm::translate(glm::mat4(1.0f), glm::vec3(-4.0f, 0.05f, 27.0f));
+    drhroad = glm::scale(drhroad, glm::vec3(9.0f, 0.02f, 2.0f));
+    drawCube(shaderProgram, vao, drhroad, asphalt);
+
+    glm::mat4 sshroad = glm::translate(glm::mat4(1.0f), glm::vec3(-8.0f, 0.05f, 12.0f));
+    sshroad = glm::scale(sshroad, glm::vec3(16.0f, 0.02f, 2.0f));
+    drawCube(shaderProgram, vao, sshroad, asphalt);
+
+     glm::mat4 aehroad = glm::translate(glm::mat4(1.0f), glm::vec3(-8.0f, 0.05f, -5.0f));
+    aehroad = glm::scale(aehroad, glm::vec3(16.0f, 0.02f, 2.0f));
+    drawCube(shaderProgram, vao, aehroad, asphalt);
+
+    
 }
 
 void drawRoundabout(Shader& shaderProgram, VAO& vao) {
@@ -1332,7 +1825,7 @@ void drawRoundabout(Shader& shaderProgram, VAO& vao) {
     glm::vec3 grass(0.2f, 0.6f, 0.2f);
     glm::vec3 monumentColor(0.8f, 0.8f, 0.8f);
 
-    float centerX = 12.0f, centerZ = 17.0f;
+    float centerX = 15.2f, centerZ = 18.0f;
 
     glm::mat4 ring = glm::translate(glm::mat4(1.0f), glm::vec3(centerX, 0.05f, centerZ));
     ring = glm::scale(ring, glm::vec3(8.0f, 0.02f, 8.0f));
@@ -1346,13 +1839,13 @@ void drawRoundabout(Shader& shaderProgram, VAO& vao) {
     monument = glm::scale(monument, glm::vec3(1.0f, 2.0f, 1.0f));
     drawCube(shaderProgram, vao, monument, monumentColor);
 
-    glm::mat4 legN = glm::translate(glm::mat4(1.0f), glm::vec3(centerX, 0.05f, 22.0f));
-    legN = glm::scale(legN, glm::vec3(2.5f, 0.02f, 4.0f));
-    drawCube(shaderProgram, vao, legN, asphalt);
+    // glm::mat4 legN = glm::translate(glm::mat4(1.0f), glm::vec3(centerX, 0.05f, 22.0f));
+    // legN = glm::scale(legN, glm::vec3(2.5f, 0.02f, 4.0f));
+    // drawCube(shaderProgram, vao, legN, asphalt);
 
-    glm::mat4 legW = glm::translate(glm::mat4(1.0f), glm::vec3(6.0f, 0.05f, centerZ));
-    legW = glm::scale(legW, glm::vec3(8.0f, 0.02f, 2.5f));
-    drawCube(shaderProgram, vao, legW, asphalt);
+    // glm::mat4 legW = glm::translate(glm::mat4(1.0f), glm::vec3(6.0f, 0.05f, centerZ));
+    // legW = glm::scale(legW, glm::vec3(8.0f, 0.02f, 2.5f));
+    // drawCube(shaderProgram, vao, legW, asphalt);
 }
 
 void drawTree(Shader& shaderProgram, VAO& vao, float x, float z) {
@@ -1378,10 +1871,10 @@ void drawTree(Shader& shaderProgram, VAO& vao, float x, float z) {
 
 void drawStreetLightPost(Shader& shaderProgram, VAO& vao, float x, float z, bool isLit) {
     // Colors matching image_7a711f.jpg
-    glm::vec3 goldColor(0.85f, 0.68f, 0.25f);   // Ornate brass base, scrollwork & finial
-    glm::vec3 poleColor(0.18f, 0.18f, 0.20f);   // Dark metallic grey pole
-    glm::vec3 shadeColor(0.12f, 0.12f, 0.14f);  // Black bell lamp shades
-    glm::vec3 bulbColor = isLit ? glm::vec3(1.0f, 0.96f, 0.65f) : glm::vec3(0.30f, 0.30f, 0.30f); // Glowing light
+    glm::vec3 goldColor(0.48f, 0.34f, 0.16f);
+    glm::vec3 poleColor(0.09f, 0.10f, 0.11f);
+    glm::vec3 shadeColor(0.11f, 0.13f, 0.14f);
+    glm::vec3 bulbColor = isLit ? glm::vec3(1.0f, 0.56f, 0.20f) : glm::vec3(0.24f, 0.27f, 0.29f);
 
     auto drawVerticalCylinder = [&](float radius, float height, glm::vec3 pos, glm::vec3 color) {
         glm::mat4 model = glm::translate(glm::mat4(1.0f), pos);
@@ -1430,23 +1923,13 @@ void drawStreetLightPost(Shader& shaderProgram, VAO& vao, float x, float z, bool
     for (int i = 0; i < 2; i++) {
         float lx = x + armOffsetsX[i];
 
-        // Black Bell Lamp Shade
-        glm::mat4 shade = glm::translate(glm::mat4(1.0f), glm::vec3(lx, 4.15f, z));
-        shade = glm::scale(shade, glm::vec3(0.40f, 0.25f, 0.40f));
-        drawCube(shaderProgram, vao, shade, shadeColor);
+        glm::mat4 shade = glm::translate(glm::mat4(1.0f), glm::vec3(lx, 4.22f, z));
+        shade = glm::scale(shade, glm::vec3(0.34f, 0.18f, 0.34f));
+        drawSphere(shaderProgram, shade, shadeColor, 1.0f, false);
 
-        // Illuminating Glass Bulb
-        glm::mat4 bulb = glm::translate(glm::mat4(1.0f), glm::vec3(lx, 3.95f, z));
-        bulb = glm::scale(bulb, glm::vec3(0.24f, 0.20f, 0.24f));
-        drawCube(shaderProgram, vao, bulb, bulbColor);
-
-        // Downward Light Beam Cone (Only drawn when spotlight is turned ON)
-        if (isLit) {
-            glm::vec3 beamColor(1.0f, 0.95f, 0.70f);
-            glm::mat4 beam = glm::translate(glm::mat4(1.0f), glm::vec3(lx, 1.95f, z));
-            beam = glm::scale(beam, glm::vec3(1.80f, 3.80f, 1.80f));
-            drawCube(shaderProgram, vao, beam, beamColor * 0.35f); // Soft spotlight beam effect
-        }
+        glm::mat4 bulb = glm::translate(glm::mat4(1.0f), glm::vec3(lx, 4.02f, z));
+        bulb = glm::scale(bulb, glm::vec3(0.14f, 0.12f, 0.14f));
+        drawSphere(shaderProgram, bulb, bulbColor, isLit ? 0.88f : 0.58f, isLit);
     }
 }
 
@@ -1879,6 +2362,50 @@ void drawXZRedDots(Shader& shaderProgram, VAO& vao, float gridRange = 35.0f, flo
     }
 }
 
+void drawCampusScene(Shader& shaderProgram, VAO& vao, float time) {
+    glm::mat4 ground = glm::scale(glm::mat4(1.0f), glm::vec3(150.0f, 0.1f, 150.0f));
+    drawCube(shaderProgram, vao, ground, glm::vec3(0.25f, 0.55f, 0.22f));
+
+    drawFourConnectedBlocks(shaderProgram, vao, 15.0f);
+    drawSSHAKH(shaderProgram, vao, -22.0f, -5.0f, 12.0f, 12.0f, 5.83f, 1.5f, glm::vec3(0.80f, 0.70f, 0.60f));
+    drawSSHAKH(shaderProgram, vao, -22.0f, 12.0f, 12.0f, 15.0f, 5.83f, 1.8f, glm::vec3(0.80f, 0.70f, 0.60f));
+    drawFFHDRH(shaderProgram, vao, -11.0f, 3.0f, 7.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f));
+    drawFFHDRH(shaderProgram, vao, -11.0f, 23.0f, 7.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f));
+    drawLSH(shaderProgram, vao, -13.0f, -13.0f, 2.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f));
+    drawRoads(shaderProgram, vao);
+    drawRoundabout(shaderProgram, vao);
+
+    float treeZ[] = { -22.0f, -14.0f, -6.0f, 2.0f, 10.0f, 18.0f };
+    for (float z : treeZ) {
+        drawTree(shaderProgram, vao, -3.2f, z);
+        drawTree(shaderProgram, vao, 8.8f, z);
+    }
+    drawTree(shaderProgram, vao, 16.0f, 22.0f);
+    drawTree(shaderProgram, vao, 16.0f, 31.0f);
+
+    float lightZ[] = { -25.0f, -10.0f, 2.0f, 14.0f, 26.0f };
+    for (float z : lightZ) {
+        drawStreetLightPost(shaderProgram, vao, -0.5f, z, false);
+        drawStreetLightPost(shaderProgram, vao, 7.5f, z, false);
+    }
+
+    float speed = 8.0f;
+    float roadLength = 50.0f;
+    float cycle = fmod(time * speed, roadLength * 2.0f);
+    float vehicleZ, dirZ;
+    if (cycle < roadLength) {
+        vehicleZ = -25.0f + cycle;
+        dirZ = 1.0f;
+    }
+    else {
+        vehicleZ = 25.0f - (cycle - roadLength);
+        dirZ = -1.0f;
+    }
+    float carWheelRot = glm::degrees(time * speed / 0.35f);
+    float busWheelRot = glm::degrees(time * speed / 0.48f);
+    drawCar(shaderProgram, vao, (dirZ > 0 ? -0.1f : 3.2f), -vehicleZ, -dirZ, -carWheelRot);
+    drawBus(shaderProgram, vao, (dirZ > 0 ? 3.2f : -0.1f), vehicleZ, dirZ, busWheelRot);
+}
 
 int main() {
     glfwInit();
@@ -1912,7 +2439,7 @@ int main() {
 
     Shader shaderProgram("default.vert", "default.frag");
     // Sun position in world space
-    glm::vec3 sunPos(25.0f, 45.0f, 25.0f);
+    glm::vec3 sunPos(15.0f, 30.0f, 15.0f);
 
     VAO VAO1;
     VAO1.Bind();
@@ -1927,12 +2454,105 @@ int main() {
 
     glEnable(GL_DEPTH_TEST);
 
+    const unsigned int shadowMapSize = 2048;
+    GLuint shadowFramebuffer = 0;
+    GLuint shadowTexture = 0;
+    glGenFramebuffers(1, &shadowFramebuffer);
+    glGenTextures(1, &shadowTexture);
+    glBindTexture(GL_TEXTURE_2D, shadowTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadowMapSize, shadowMapSize, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    const GLfloat shadowBorderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, shadowBorderColor);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowTexture, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        std::cerr << "Directional shadow framebuffer is incomplete" << std::endl;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 
 
 
 
     while (!glfwWindowShouldClose(window)) {
         processInput(window);
+
+        float frameTime = static_cast<float>(glfwGetTime());
+        int shadowDisplayW, shadowDisplayH;
+        glfwGetFramebufferSize(window, &shadowDisplayW, &shadowDisplayH);
+        if (shadowDisplayW == 0) shadowDisplayW = 1;
+        if (shadowDisplayH == 0) shadowDisplayH = 1;
+        glm::vec3 sunDirection = glm::normalize(-sunPos);
+        const glm::vec3 pointPosition(-10.0f, 16.0f, 2.0f);
+        const bool hallWindowLightsActive = hallWindowLightsOn && !isDayMode;
+        glm::vec3 shadowLightPosition = sunPos;
+        glm::vec3 shadowLightDirection = sunDirection;
+        int shadowSourceType = 0;
+
+        if (isDayMode && directionalLightOn) {
+            shadowSourceType = 1;
+        }
+        else if (hallWindowLightsActive) {
+            shadowLightPosition = glm::vec3(-22.75f, 2.98f, 1.12f);
+            shadowLightDirection = glm::normalize(glm::vec3(0.0f, 0.0f, 10.0f) - shadowLightPosition);
+            shadowSourceType = 5;
+        }
+        else if (spotlightOn) {
+            shadowLightPosition = glm::vec3(6.5f, 4.02f, 2.0f);
+            shadowLightDirection = glm::vec3(0.0f, -1.0f, 0.0f);
+            shadowSourceType = 2;
+        }
+        else if (pointLightOn) {
+            shadowLightPosition = pointPosition;
+            shadowLightDirection = glm::normalize(-pointPosition);
+            shadowSourceType = 3;
+        }
+        else if (areaLightOn) {
+            shadowLightPosition = glm::vec3(-16.0f, 18.0f, 10.0f);
+            shadowLightDirection = glm::normalize(-shadowLightPosition);
+            shadowSourceType = 4;
+        }
+        else if (directionalLightOn) {
+            shadowSourceType = 1;
+        }
+
+        glm::mat4 lightView;
+        glm::mat4 lightProjection;
+        if (shadowSourceType == 1) {
+            lightView = glm::lookAt(sunPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            lightProjection = glm::ortho(-90.0f, 90.0f, -90.0f, 90.0f, 1.0f, 180.0f);
+        }
+        else {
+            glm::vec3 shadowTarget = shadowLightPosition + shadowLightDirection;
+            glm::vec3 up = std::abs(glm::dot(shadowLightDirection, glm::vec3(0.0f, 1.0f, 0.0f))) > 0.98f
+                ? glm::vec3(0.0f, 0.0f, 1.0f)
+                : glm::vec3(0.0f, 1.0f, 0.0f);
+            lightView = glm::lookAt(shadowLightPosition, shadowTarget, up);
+            float fieldOfView = shadowSourceType == 2 ? 62.0f : 100.0f;
+            lightProjection = glm::perspective(glm::radians(fieldOfView), 1.0f, 0.1f, 100.0f);
+        }
+        glm::mat4 lightSpaceMatrix = lightProjection * lightView;
+        const char* shadowSourceNames[] = { "None", "Sun", "Streetlamp", "Point light", "Area light", "Hall windows" };
+
+        shaderProgram.Activate();
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
+        glUniform1i(glGetUniformLocation(shaderProgram.ID, "shadowPass"), 1);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        if (shadowsOn && shadowSourceType != 0) {
+            glViewport(0, 0, shadowMapSize, shadowMapSize);
+            glBindFramebuffer(GL_FRAMEBUFFER, shadowFramebuffer);
+            glClear(GL_DEPTH_BUFFER_BIT);
+            drawCampusScene(shaderProgram, VAO1, frameTime);
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, shadowDisplayW, shadowDisplayH);
 
         glClearColor(0.45f, 0.70f, 0.90f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1956,10 +2576,17 @@ int main() {
 
 
         shaderProgram.Activate();
+        glUniform1i(glGetUniformLocation(shaderProgram.ID, "shadowPass"), 0);
         glUniform1i(glGetUniformLocation(shaderProgram.ID, "shadingMode"), currentShadingMode);
+        glUniform1i(glGetUniformLocation(shaderProgram.ID, "shadowsEnabled"), shadowsOn ? 1 : 0);
+        glUniform1i(glGetUniformLocation(shaderProgram.ID, "shadowSourceType"), shadowSourceType);
+        glUniform1i(glGetUniformLocation(shaderProgram.ID, "directionalLightEnabled"), directionalLightOn ? 1 : 0);
+        glUniform1i(glGetUniformLocation(shaderProgram.ID, "pointLightEnabled"), pointLightOn ? 1 : 0);
+        glUniform1i(glGetUniformLocation(shaderProgram.ID, "spotLightEnabled"), spotlightOn ? 1 : 0);
+        glUniform1i(glGetUniformLocation(shaderProgram.ID, "areaLightEnabled"), areaLightOn ? 1 : 0);
 
         // Pass lighting uniforms based on Day/Night state
-        float ambientVal = isDayMode ? 0.45f : 0.08f;
+        float ambientVal = isDayMode ? 0.38f : 0.08f;
         glUniform1f(glGetUniformLocation(shaderProgram.ID, "ambientStrength"), ambientVal);
 
         int displayW, displayH;
@@ -1977,16 +2604,74 @@ int main() {
 
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "proj"), 1, GL_FALSE, glm::value_ptr(proj));
-        glUniform3f(glGetUniformLocation(shaderProgram.ID, "lightPos"), 20.0f, 40.0f, 20.0f);
-
-
-        // Sun position & lighting
-        glUniform3f(glGetUniformLocation(shaderProgram.ID, "lightPos"), sunPos.x, sunPos.y, sunPos.z);
-
-        // Ground Plane
-        glm::mat4 ground = glm::scale(glm::mat4(1.0f), glm::vec3(70.0f, 0.1f, 70.0f));
-        drawCube(shaderProgram, VAO1, ground, glm::vec3(0.25f, 0.55f, 0.22f));
-
+        glUniform3fv(glGetUniformLocation(shaderProgram.ID, "viewPos"), 1, glm::value_ptr(cameraPos));
+        glUniform3fv(glGetUniformLocation(shaderProgram.ID, "directionalLightDirection"), 1, glm::value_ptr(sunDirection));
+        glUniform3fv(glGetUniformLocation(shaderProgram.ID, "shadowLightDirection"), 1, glm::value_ptr(shadowLightDirection));
+        glm::vec3 directionalColor = isDayMode ? glm::vec3(1.0f, 0.94f, 0.82f) : glm::vec3(0.12f, 0.16f, 0.30f);
+        glm::vec3 pointColor(0.55f, 0.68f, 1.0f);
+        glm::vec3 spotDirection(0.0f, -1.0f, 0.0f);
+        glm::vec3 spotColor(1.0f, 0.78f, 0.42f);
+        const float lampZPositions[] = { -25.0f, -10.0f, 2.0f, 14.0f, 26.0f };
+        const float lampXPositions[] = { -0.5f, 7.5f };
+        const float lampHeadOffsets[] = { -1.0f, 1.0f };
+        glm::vec3 spotPositions[20];
+        int spotIndex = 0;
+        for (float lampX : lampXPositions) {
+            for (float lampZ : lampZPositions) {
+                for (float headOffset : lampHeadOffsets) {
+                    spotPositions[spotIndex++] = glm::vec3(lampX + headOffset, 4.02f, lampZ);
+                }
+            }
+        }
+        glm::vec3 areaPositions[4] = {
+            glm::vec3(-18.0f, 18.0f, 8.0f), glm::vec3(-14.0f, 18.0f, 8.0f),
+            glm::vec3(-18.0f, 18.0f, 12.0f), glm::vec3(-14.0f, 18.0f, 12.0f)
+        };
+        glm::vec3 areaColor(0.80f, 0.42f, 0.24f);
+        const glm::vec3 hallWindowCenters[5] = {
+            glm::vec3(-22.75f, 2.98f, 1.12f), glm::vec3(-22.75f, 2.98f, 19.62f),
+            glm::vec3(-11.6f, 0.69f, 8.12f), glm::vec3(-11.6f, 0.69f, 28.12f),
+            glm::vec3(-13.0f, 1.91f, -7.90f)
+        };
+        const glm::vec2 windowSampleOffsets[4] = {
+            glm::vec2(-0.35f, -0.18f), glm::vec2(0.35f, -0.18f),
+            glm::vec2(-0.35f, 0.18f), glm::vec2(0.35f, 0.18f)
+        };
+        glm::vec3 hallWindowLightPositions[20];
+        for (int hall = 0; hall < 5; ++hall) {
+            for (int sample = 0; sample < 4; ++sample) {
+                hallWindowLightPositions[hall * 4 + sample] = hallWindowCenters[hall] +
+                    glm::vec3(windowSampleOffsets[sample].x, windowSampleOffsets[sample].y, 0.0f);
+            }
+        }
+        glUniform1i(glGetUniformLocation(shaderProgram.ID, "hallWindowLightsEnabled"), hallWindowLightsActive ? 1 : 0);
+        glm::vec3 hallWindowLightColor(1.0f, 0.48f, 0.19f);
+        glUniform3fv(glGetUniformLocation(shaderProgram.ID, "hallWindowLightColor"), 1, glm::value_ptr(hallWindowLightColor));
+        glUniform3fv(glGetUniformLocation(shaderProgram.ID, "directionalLightColor"), 1, glm::value_ptr(directionalColor));
+        glUniform3fv(glGetUniformLocation(shaderProgram.ID, "pointLightPosition"), 1, glm::value_ptr(pointPosition));
+        glUniform3fv(glGetUniformLocation(shaderProgram.ID, "pointLightColor"), 1, glm::value_ptr(pointColor));
+        glUniform3fv(glGetUniformLocation(shaderProgram.ID, "spotLightColor"), 1, glm::value_ptr(spotColor));
+        for (int i = 0; i < 20; ++i) {
+            std::string positionName = "spotLightPositions[" + std::to_string(i) + "]";
+            std::string directionName = "spotLightDirections[" + std::to_string(i) + "]";
+            glUniform3fv(glGetUniformLocation(shaderProgram.ID, positionName.c_str()), 1, glm::value_ptr(spotPositions[i]));
+            glUniform3fv(glGetUniformLocation(shaderProgram.ID, directionName.c_str()), 1, glm::value_ptr(spotDirection));
+        }
+        glUniform3fv(glGetUniformLocation(shaderProgram.ID, "areaLightColor"), 1, glm::value_ptr(areaColor));
+        for (int i = 0; i < 4; ++i) {
+            std::string uniformName = "areaLightPositions[" + std::to_string(i) + "]";
+            glUniform3fv(glGetUniformLocation(shaderProgram.ID, uniformName.c_str()), 1, glm::value_ptr(areaPositions[i]));
+        }
+        for (int i = 0; i < 20; ++i) {
+            std::string uniformName = "hallWindowLightPositions[" + std::to_string(i) + "]";
+            glUniform3fv(glGetUniformLocation(shaderProgram.ID, uniformName.c_str()), 1, glm::value_ptr(hallWindowLightPositions[i]));
+        }
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, shadowTexture);
+        glUniform1i(glGetUniformLocation(shaderProgram.ID, "shadowMap"), 0);
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightSpaceMatrix));
+        glUniform1f(glGetUniformLocation(shaderProgram.ID, "spotInnerCutoff"), std::cos(glm::radians(18.0f)));
+        glUniform1f(glGetUniformLocation(shaderProgram.ID, "spotOuterCutoff"), std::cos(glm::radians(28.0f)));
 
         //==================================================
         //==================================================
@@ -1999,9 +2684,9 @@ int main() {
         //sun===================================================
       // Draw Sun (Only visible brightly during Day mode)
         glm::mat4 sunModel = glm::translate(glm::mat4(1.0f), sunPos);
-        sunModel = glm::scale(sunModel, glm::vec3(2.5f, 2.5f, 2.5f));
+        sunModel = glm::scale(sunModel, glm::vec3(6.0f));
         glm::vec3 sunColor = isDayMode ? glm::vec3(1.0f, 0.95f, 0.2f) : glm::vec3(0.4f, 0.4f, 0.5f);
-        drawCube(shaderProgram, VAO1, sunModel, sunColor);
+        drawSphere(shaderProgram, sunModel, sunColor, 1.0f, true);
         //=============================================================
 
         // Draw red dot at every (X, Z) coordinate step of 2.0 units
@@ -2013,13 +2698,16 @@ int main() {
 
         // Academic Blocks
         drawFourConnectedBlocks(shaderProgram, VAO1, 15.0f);
+        const bool hallWindowsLit = hallWindowLightsOn && !isDayMode;
 
         // Halls
-        drawSSHAKH(shaderProgram, VAO1, -22.0f, -5.0f, 12.0f, 12.0f, 5.83f, 1.5f, glm::vec3(0.80f, 0.70f, 0.60f)); // AEH
-        drawSSHAKH(shaderProgram, VAO1, -22.0f, 12.0f, 12.0f, 15.0f, 5.83f, 1.8f, glm::vec3(0.80f, 0.70f, 0.60f));  // SSH
-        drawFFHDRH(shaderProgram, VAO1, -11.0f, 3.0f, 7.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f));      // FFH
-        drawFFHDRH(shaderProgram, VAO1, -11.0f, 23.0f, 7.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f));     // DRH
-
+        drawSSHAKH(shaderProgram, VAO1, -22.0f, -5.0f, 12.0f, 12.0f, 5.83f, 1.5f, glm::vec3(0.80f, 0.70f, 0.60f), hallWindowsLit); // AEH
+        drawSSHAKH(shaderProgram, VAO1, -22.0f, 12.0f, 12.0f, 15.0f, 5.83f, 1.8f, glm::vec3(0.80f, 0.70f, 0.60f), hallWindowsLit); // SSH
+        drawFFHDRH(shaderProgram, VAO1, -11.0f, 3.0f, 7.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f), hallWindowsLit); // FFH
+        drawFFHDRH(shaderProgram, VAO1, -11.0f, 23.0f, 7.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f), hallWindowsLit); // DRH
+        drawLSH(shaderProgram, VAO1, -13.0f, -13.0f, 2.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f), hallWindowsLit); // LHS
+        drawBRH(shaderProgram, VAO1, 27.0f, 23.0f, 7.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f), hallWindowsLit); // BRH
+        
         // Roads & Roundabout
         drawRoads(shaderProgram, VAO1);
         drawRoundabout(shaderProgram, VAO1);
@@ -2047,7 +2735,7 @@ int main() {
 
 
         // Vehicle Movement & Rolling Animation Logic
-        float time = (float)glfwGetTime();
+        float time = frameTime;
         float speed = 8.0f;
         float roadLength = 50.0f;
 
@@ -2092,6 +2780,16 @@ int main() {
         }
 
         ImGui::Separator();
+        if (ImGui::Checkbox("Day mode", &isDayMode)) {
+            spotlightOn = !isDayMode;
+        }
+        ImGui::Checkbox("Directional light (sun)", &directionalLightOn);
+        ImGui::Checkbox("Point light", &pointLightOn);
+        ImGui::Checkbox("Spot light (lamp post)", &spotlightOn);
+        ImGui::Checkbox("Area light", &areaLightOn);
+        ImGui::Checkbox("Sun shadows", &shadowsOn);
+        ImGui::Text("Shadow caster: %s", shadowsOn ? shadowSourceNames[shadowSourceType] : "Off");
+        ImGui::Text("Hall window area lights: %s (H)", hallWindowLightsOn && !isDayMode ? "On" : "Off");
         // Display active mode status
         const char* modeStrs[] = { "Flat", "Gouraud", "Phong" };
         ImGui::Text("Active: %s", modeStrs[currentShadingMode]);
