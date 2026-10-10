@@ -28,6 +28,10 @@ float lastX = width / 2.0f;
 float lastY = height / 2.0f;
 bool isDragging = false;
 bool firstMouse = true;
+bool firstPersonCamera = false;
+glm::vec3 firstPersonPosition(3.5f, 0.7f, 44.0f);
+float firstPersonYaw = -90.0f;
+float firstPersonPitch = 0.0f;
 // Global spotlight state
 bool spotlightOn = false;
 // Global shading mode tracker (0 = Flat, 1 = Gouraud, 2 = Phong)
@@ -56,6 +60,19 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 
 // Mouse Button Callback (Detect Left Click Drag)
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+    if (firstPersonCamera) {
+        if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+            if (action == GLFW_PRESS) {
+                isDragging = true;
+                firstMouse = true;
+            }
+            else if (action == GLFW_RELEASE) {
+                isDragging = false;
+            }
+        }
+        return;
+    }
+
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         if (action == GLFW_PRESS) {
             isDragging = true;
@@ -84,6 +101,13 @@ void cursor_position_callback(GLFWwindow* window, double xposIn, double yposIn) 
     float yoffset = lastY - ypos; // Reversed: y-coordinates go from bottom to top
     lastX = xpos;
     lastY = ypos;
+
+    if (firstPersonCamera) {
+        firstPersonYaw += xoffset * 0.12f;
+        firstPersonPitch += yoffset * 0.12f;
+        firstPersonPitch = glm::clamp(firstPersonPitch, -85.0f, 85.0f);
+        return;
+    }
 
     float sensitivity = 0.25f;
     xoffset *= sensitivity;
@@ -121,6 +145,38 @@ void moveManualBus(float moveX, float moveZ, float distance) {
 void processInput(GLFWwindow* window, float deltaTime) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+
+    static bool tabKeyPressed = false;
+    if (glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS) {
+        if (!tabKeyPressed) {
+            firstPersonCamera = !firstPersonCamera;
+            isDragging = false;
+            firstMouse = true;
+            tabKeyPressed = true;
+        }
+    }
+    else {
+        tabKeyPressed = false;
+    }
+
+    if (firstPersonCamera) {
+        glm::vec3 forward(
+            std::cos(glm::radians(firstPersonYaw)),
+            0.0f,
+            std::sin(glm::radians(firstPersonYaw))
+        );
+        glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+        glm::vec3 movement(0.0f);
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) movement += forward;
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) movement -= forward;
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) movement += right;
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) movement -= right;
+        if (glm::length(movement) > 0.0f) {
+            firstPersonPosition += glm::normalize(movement) * (8.0f * deltaTime);
+            firstPersonPosition.x = glm::clamp(firstPersonPosition.x, -35.0f, 35.0f);
+            firstPersonPosition.z = glm::clamp(firstPersonPosition.z, -35.0f, 48.0f);
+        }
+    }
 
     // Keyboard rotation & height controls directly adjust camera angles/radius
     //if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
@@ -2673,11 +2729,22 @@ int main() {
         float aspectRatio = (float)displayW / (float)displayH;
 
         glm::vec3 cameraPos;
-        cameraPos.x = cameraRadius * std::cos(glm::radians(pitch)) * std::cos(glm::radians(yaw));
-        cameraPos.y = cameraRadius * std::sin(glm::radians(pitch));
-        cameraPos.z = cameraRadius * std::cos(glm::radians(pitch)) * std::sin(glm::radians(yaw));
-
-        glm::mat4 view = glm::lookAt(cameraPos, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 view;
+        if (firstPersonCamera) {
+            cameraPos = firstPersonPosition;
+            glm::vec3 cameraFront(
+                std::cos(glm::radians(firstPersonYaw)) * std::cos(glm::radians(firstPersonPitch)),
+                std::sin(glm::radians(firstPersonPitch)),
+                std::sin(glm::radians(firstPersonYaw)) * std::cos(glm::radians(firstPersonPitch))
+            );
+            view = glm::lookAt(cameraPos, cameraPos + cameraFront, glm::vec3(0.0f, 1.0f, 0.0f));
+        }
+        else {
+            cameraPos.x = cameraRadius * std::cos(glm::radians(pitch)) * std::cos(glm::radians(yaw));
+            cameraPos.y = cameraRadius * std::sin(glm::radians(pitch));
+            cameraPos.z = cameraRadius * std::cos(glm::radians(pitch)) * std::sin(glm::radians(yaw));
+            view = glm::lookAt(cameraPos, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        }
         glm::mat4 proj = glm::perspective(glm::radians(45.0f), aspectRatio, 0.1f, 150.0f);
 
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
@@ -2836,6 +2903,23 @@ int main() {
         if (ImGui::Button("Phong Shading")) {
             currentShadingMode = 2;
         }
+
+        ImGui::Separator();
+        int cameraMode = firstPersonCamera ? 1 : 0;
+        ImGui::Text("Camera view");
+        if (ImGui::RadioButton("Orbit", &cameraMode, 0)) {
+            firstPersonCamera = false;
+            isDragging = false;
+            firstMouse = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("First person", &cameraMode, 1)) {
+            firstPersonCamera = true;
+            isDragging = false;
+            firstMouse = true;
+        }
+        if (firstPersonCamera) ImGui::Text("Right-drag: look | WASD: walk | Tab: switch view");
+        else ImGui::Text("Left-drag: orbit | Wheel: zoom | Tab: switch view");
 
         ImGui::Separator();
         if (ImGui::Checkbox("Manual bus control", &manualBusControl) && manualBusControl) {
