@@ -1,9 +1,11 @@
 #version 330 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
+layout (location = 2) in vec2 aTexCoord;
 
 out vec3 FragPos;
 out vec3 Normal;
+out vec2 TexCoord;
 out vec3 GouraudAmbient;
 out vec3 GouraudDirectional;
 out vec3 GouraudPoint;
@@ -40,6 +42,7 @@ uniform int areaLightEnabled;
 uniform int hallWindowLightsEnabled;
 uniform int shadowSourceType;
 uniform int shadowPass;
+uniform vec2 uvScale;
 
 vec3 illuminate(vec3 normal, vec3 lightDir, vec3 viewDir, vec3 lightColor, float attenuation) {
     float diffuse = max(dot(normal, lightDir), 0.0);
@@ -52,6 +55,7 @@ void main() {
     vec4 worldPos = model * vec4(aPos, 1.0);
     FragPos = worldPos.xyz;
     Normal = mat3(transpose(inverse(model))) * aNormal;
+    TexCoord = aTexCoord * uvScale;
 
     if (shadowPass == 1) {
         gl_Position = lightSpaceMatrix * worldPos;

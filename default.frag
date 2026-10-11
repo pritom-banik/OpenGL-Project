@@ -3,6 +3,7 @@ out vec4 FragColor;
 
 in vec3 FragPos;
 in vec3 Normal;
+in vec2 TexCoord;
 in vec3 GouraudAmbient;
 in vec3 GouraudDirectional;
 in vec3 GouraudPoint;
@@ -11,6 +12,8 @@ in vec3 GouraudArea;
 in vec3 GouraudHallWindow;
 
 uniform sampler2D shadowMap;
+uniform sampler2D diffuseTexture;
+uniform int useTexture;
 uniform mat4 lightSpaceMatrix;
 uniform vec3 objectColor;
 uniform vec3 viewPos;
@@ -97,6 +100,9 @@ void main() {
 
     float shadow = calculateShadow(normal);
     float shadowVisibility = 1.0 - shadow;
+
+    vec3 baseColor = (useTexture == 1) ? (texture(diffuseTexture, TexCoord).rgb * objectColor) : objectColor;
+
     vec3 result;
     if (shadingMode == 1) {
         result = GouraudAmbient
@@ -105,6 +111,9 @@ void main() {
             + GouraudSpot * (shadowSourceType == 2 ? shadowVisibility : 1.0)
             + GouraudArea * (shadowSourceType == 4 ? shadowVisibility : 1.0)
             + GouraudHallWindow * (shadowSourceType == 5 ? shadowVisibility : 1.0);
+        if (useTexture == 1) {
+            result *= texture(diffuseTexture, TexCoord).rgb;
+        }
     }
     else {
         vec3 viewDir = normalize(viewPos - FragPos);
@@ -155,7 +164,7 @@ void main() {
             + pointLights * (shadowSourceType == 3 ? shadowVisibility : 1.0)
             + spotLights * (shadowSourceType == 2 ? shadowVisibility : 1.0)
             + areaLights * (shadowSourceType == 4 ? shadowVisibility : 1.0)
-            + hallWindowLights * (shadowSourceType == 5 ? shadowVisibility : 1.0)) * objectColor;
+            + hallWindowLights * (shadowSourceType == 5 ? shadowVisibility : 1.0)) * baseColor;
     }
 
     FragColor = vec4(result, objectAlpha);

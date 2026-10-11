@@ -16,14 +16,19 @@
 #include "shaderClass.h"
 #include "VAO.h"
 #include "VBO.h"
+#include "Texture.h"
+
+// Textures
+Texture* roadTexture = nullptr;
+Texture* brickTexture = nullptr;
 
 const unsigned int width = 1280;
 const unsigned int height = 960;
 
 // Interactive Camera Parameters
-float cameraRadius = 40.0f;  // Zoom distance
-float yaw = 90.0f;          // Horizontal angle (degrees)
-float pitch = 15.0f;         // Vertical angle (degrees)
+float cameraRadius = 45.0f;  // Zoom distance
+float yaw = 80.0f;          // Horizontal angle (degrees)
+float pitch = 10.0f;         // Vertical angle (degrees)
 float lastX = width / 2.0f;
 float lastY = height / 2.0f;
 bool isDragging = false;
@@ -245,50 +250,55 @@ void processInput(GLFWwindow* window, float deltaTime) {
     else { ePressed = false; }
 }
 
-// Cube vertices (Positions + Normals)
+// Cube vertices (Positions + Normals + Texture Coordinates)
 GLfloat vertices[] = {
-    // Back
-    -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-     0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-     0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-     0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-    -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-    -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-    // Front
-    -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-     0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-     0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-     0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-    -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-    -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-    // Left
-    -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-    -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-    // Right
-     0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-     0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-     // Bottom
-     -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-      0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-      0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-      0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-     -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-     -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-     // Top
-     -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-      0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-      0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-      0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-     -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-     -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f
+    // Back (Normal: 0, 0, -1)
+    -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  0.0f, 0.0f,
+     0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  1.0f, 0.0f,
+     0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  1.0f, 1.0f,
+     0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  1.0f, 1.0f,
+    -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  0.0f, 1.0f,
+    -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,  0.0f, 0.0f,
+
+    // Front (Normal: 0, 0, 1)
+    -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  0.0f, 0.0f,
+     0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  1.0f, 0.0f,
+     0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  1.0f, 1.0f,
+     0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  1.0f, 1.0f,
+    -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  0.0f, 1.0f,
+    -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  0.0f, 0.0f,
+
+    // Left (Normal: -1, 0, 0)
+    -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,  1.0f, 1.0f,
+    -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f,  0.0f, 1.0f,
+    -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,  0.0f, 0.0f,
+    -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,  0.0f, 0.0f,
+    -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,  1.0f, 0.0f,
+    -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,  1.0f, 1.0f,
+
+    // Right (Normal: 1, 0, 0)
+     0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f,
+     0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,  0.0f, 1.0f,
+     0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,  0.0f, 0.0f,
+     0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,  0.0f, 0.0f,
+     0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f,
+     0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f,
+
+    // Bottom (Normal: 0, -1, 0)
+    -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,  0.0f, 1.0f,
+     0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,  1.0f, 1.0f,
+     0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,  1.0f, 0.0f,
+     0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,  1.0f, 0.0f,
+    -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,  0.0f, 0.0f,
+    -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,  0.0f, 1.0f,
+
+    // Top (Normal: 0, 1, 0)
+    -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 0.0f,
+     0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f,
+     0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 1.0f,
+     0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 1.0f,
+    -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 1.0f,
+    -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 0.0f
 };
 
 void drawCube(Shader& shaderProgram, VAO& vao, glm::mat4 model, glm::vec3 color, bool emissive = false) {
@@ -296,9 +306,30 @@ void drawCube(Shader& shaderProgram, VAO& vao, glm::mat4 model, glm::vec3 color,
     glUniform3f(glGetUniformLocation(shaderProgram.ID, "objectColor"), color.x, color.y, color.z);
     glUniform1f(glGetUniformLocation(shaderProgram.ID, "objectAlpha"), 1.0f);
     glUniform1i(glGetUniformLocation(shaderProgram.ID, "emissiveObject"), emissive ? 1 : 0);
+    glUniform1i(glGetUniformLocation(shaderProgram.ID, "useTexture"), 0);
+    glUniform2f(glGetUniformLocation(shaderProgram.ID, "uvScale"), 1.0f, 1.0f);
 
     vao.Bind();
     glDrawArrays(GL_TRIANGLES, 0, 36);
+}
+
+void drawTexturedCube(Shader& shaderProgram, VAO& vao, glm::mat4 model, GLuint textureID, glm::vec2 uvScale = glm::vec2(1.0f, 1.0f), glm::vec3 tint = glm::vec3(1.0f)) {
+    glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
+    glUniform3f(glGetUniformLocation(shaderProgram.ID, "objectColor"), tint.x, tint.y, tint.z);
+    glUniform1f(glGetUniformLocation(shaderProgram.ID, "objectAlpha"), 1.0f);
+    glUniform1i(glGetUniformLocation(shaderProgram.ID, "emissiveObject"), 0);
+    glUniform1i(glGetUniformLocation(shaderProgram.ID, "useTexture"), 1);
+    glUniform2f(glGetUniformLocation(shaderProgram.ID, "uvScale"), uvScale.x, uvScale.y);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glUniform1i(glGetUniformLocation(shaderProgram.ID, "diffuseTexture"), 1);
+
+    vao.Bind();
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    glUniform1i(glGetUniformLocation(shaderProgram.ID, "useTexture"), 0);
+    glUniform2f(glGetUniformLocation(shaderProgram.ID, "uvScale"), 1.0f, 1.0f);
 }
 
 void drawSphere(Shader& shaderProgram, glm::mat4 model, glm::vec3 color, float opacity, bool emissive) {
@@ -351,6 +382,7 @@ void drawSphere(Shader& shaderProgram, glm::mat4 model, glm::vec3 color, float o
     glUniform3f(glGetUniformLocation(shaderProgram.ID, "objectColor"), color.x, color.y, color.z);
     glUniform1f(glGetUniformLocation(shaderProgram.ID, "objectAlpha"), opacity);
     glUniform1i(glGetUniformLocation(shaderProgram.ID, "emissiveObject"), emissive ? 1 : 0);
+    glUniform1i(glGetUniformLocation(shaderProgram.ID, "useTexture"), 0);
     if (opacity < 1.0f) {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -449,6 +481,7 @@ void drawSemiOval(Shader& shaderProgram, float rx, float h, float rz, glm::vec3 
 
     glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
     glUniform3f(glGetUniformLocation(shaderProgram.ID, "objectColor"), color.x, color.y, color.z);
+    glUniform1i(glGetUniformLocation(shaderProgram.ID, "useTexture"), 0);
 
     glBindVertexArray(semiVAO);
     glDrawArrays(GL_TRIANGLES, 0, vertexCount);
@@ -523,6 +556,7 @@ void drawCylinder(Shader& shaderProgram, float radius, float width, glm::mat4 mo
 
     glUniformMatrix4fv(glGetUniformLocation(shaderProgram.ID, "model"), 1, GL_FALSE, glm::value_ptr(scaledModel));
     glUniform3f(glGetUniformLocation(shaderProgram.ID, "objectColor"), color.x, color.y, color.z);
+    glUniform1i(glGetUniformLocation(shaderProgram.ID, "useTexture"), 0);
 
     glBindVertexArray(cylVAO);
     glDrawArrays(GL_TRIANGLES, 0, vertexCount);
@@ -1849,9 +1883,17 @@ void drawRoads(Shader& shaderProgram, VAO& vao) {
     glm::vec3 asphalt(0.25f, 0.25f, 0.25f);
     glm::vec3 stripeColor(0.95f, 0.85f, 0.10f);
 
+    auto drawRoadSegment = [&](glm::mat4 model, float sx, float sz) {
+        if (roadTexture != nullptr) {
+            drawTexturedCube(shaderProgram, vao, model, roadTexture->ID, glm::vec2(sx / 3.5f, sz / 3.5f));
+        } else {
+            drawCube(shaderProgram, vao, model, asphalt);
+        }
+    };
+
     glm::mat4 mainRoad = glm::translate(glm::mat4(1.0f), glm::vec3(3.5f, 0.05f, 13.0f));
     mainRoad = glm::scale(mainRoad, glm::vec3(7.0f, 0.02f, 66.0f));
-    drawCube(shaderProgram, vao, mainRoad, asphalt);
+    drawRoadSegment(mainRoad, 7.0f, 66.0f);
 
     for (float z = -18.0f; z <= 44.0f; z += 4.0f) {
         glm::mat4 stripe = glm::translate(glm::mat4(1.0f), glm::vec3(3.5f, 0.07f, z));
@@ -1859,11 +1901,10 @@ void drawRoads(Shader& shaderProgram, VAO& vao) {
         drawCube(shaderProgram, vao, stripe, stripeColor);
     }
 
-
     //back road
     glm::mat4 backmainRoad = glm::translate(glm::mat4(1.0f), glm::vec3(21.0f, 0.05f, 0.0f));
     backmainRoad = glm::scale(backmainRoad, glm::vec3(3.0f, 0.02f, 60.0f));
-    drawCube(shaderProgram, vao, backmainRoad, asphalt);
+    drawRoadSegment(backmainRoad, 3.0f, 60.0f);
 
     for (float z = -28.0f; z <= 28.0f; z += 4.0f) {
         glm::mat4 backstripe = glm::translate(glm::mat4(1.0f), glm::vec3(21.0f, 0.07f, z));
@@ -1872,41 +1913,34 @@ void drawRoads(Shader& shaderProgram, VAO& vao) {
     }
 
     //Connected road
-
     glm::mat4 connectedroad = glm::translate(glm::mat4(1.0f), glm::vec3(14.0f, 0.05f, -17.0f));
     connectedroad = glm::scale(connectedroad, glm::vec3(14.0f, 0.02f, 5.2f));
-    drawCube(shaderProgram, vao, connectedroad, asphalt);
-
+    drawRoadSegment(connectedroad, 14.0f, 5.2f);
 
     glm::mat4 connectedroad2 = glm::translate(glm::mat4(1.0f), glm::vec3(14.0f, 0.05f, 26.0f));
     connectedroad2 = glm::scale(connectedroad2, glm::vec3(14.0f, 0.02f, 5.2f));
-    drawCube(shaderProgram, vao, connectedroad2, asphalt);
-
+    drawRoadSegment(connectedroad2, 14.0f, 5.2f);
 
     glm::mat4 academicroad = glm::translate(glm::mat4(1.0f), glm::vec3(14.0f, 0.05f, 12.0f));
     academicroad = glm::scale(academicroad, glm::vec3(14.0f, 0.02f, 2.2f));
-    drawCube(shaderProgram, vao, academicroad, asphalt);
+    drawRoadSegment(academicroad, 14.0f, 2.2f);
 
     //=======================================
-
     glm::mat4 ffhroad = glm::translate(glm::mat4(1.0f), glm::vec3(-4.0f, 0.05f, 7.0f));
     ffhroad = glm::scale(ffhroad, glm::vec3(9.0f, 0.02f, 2.0f));
-    drawCube(shaderProgram, vao, ffhroad, asphalt);
-
+    drawRoadSegment(ffhroad, 9.0f, 2.0f);
 
     glm::mat4 drhroad = glm::translate(glm::mat4(1.0f), glm::vec3(-4.0f, 0.05f, 27.0f));
     drhroad = glm::scale(drhroad, glm::vec3(9.0f, 0.02f, 2.0f));
-    drawCube(shaderProgram, vao, drhroad, asphalt);
+    drawRoadSegment(drhroad, 9.0f, 2.0f);
 
     glm::mat4 sshroad = glm::translate(glm::mat4(1.0f), glm::vec3(-8.0f, 0.05f, 12.0f));
     sshroad = glm::scale(sshroad, glm::vec3(16.0f, 0.02f, 2.0f));
-    drawCube(shaderProgram, vao, sshroad, asphalt);
+    drawRoadSegment(sshroad, 16.0f, 2.0f);
 
-     glm::mat4 aehroad = glm::translate(glm::mat4(1.0f), glm::vec3(-8.0f, 0.05f, -5.0f));
+    glm::mat4 aehroad = glm::translate(glm::mat4(1.0f), glm::vec3(-8.0f, 0.05f, -5.0f));
     aehroad = glm::scale(aehroad, glm::vec3(16.0f, 0.02f, 2.0f));
-    drawCube(shaderProgram, vao, aehroad, asphalt);
-
-    
+    drawRoadSegment(aehroad, 16.0f, 2.0f);
 }
 
 void drawRoundabout(Shader& shaderProgram, VAO& vao) {
@@ -1918,7 +1952,11 @@ void drawRoundabout(Shader& shaderProgram, VAO& vao) {
 
     glm::mat4 ring = glm::translate(glm::mat4(1.0f), glm::vec3(centerX, 0.05f, centerZ));
     ring = glm::scale(ring, glm::vec3(8.0f, 0.02f, 8.0f));
-    drawCube(shaderProgram, vao, ring, asphalt);
+    if (brickTexture != nullptr) {
+        drawTexturedCube(shaderProgram, vao, ring, brickTexture->ID, glm::vec2(6.0f, 6.0f));
+    } else {
+        drawCube(shaderProgram, vao, ring, asphalt);
+    }
 
     glm::mat4 island = glm::translate(glm::mat4(1.0f), glm::vec3(centerX, 0.15f, centerZ));
     island = glm::scale(island, glm::vec3(4.0f, 0.2f, 4.0f));
@@ -2579,11 +2617,15 @@ int main() {
 
     VBO VBO1(vertices, sizeof(vertices));
 
-    VAO1.LinkAttrib(VBO1, 0, 3, GL_FLOAT, 6 * sizeof(float), (void*)0);
-    VAO1.LinkAttrib(VBO1, 1, 3, GL_FLOAT, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    VAO1.LinkAttrib(VBO1, 0, 3, GL_FLOAT, 8 * sizeof(float), (void*)0);
+    VAO1.LinkAttrib(VBO1, 1, 3, GL_FLOAT, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    VAO1.LinkAttrib(VBO1, 2, 2, GL_FLOAT, 8 * sizeof(float), (void*)(6 * sizeof(float)));
 
     VAO1.Unbind();
     VBO1.Unbind();
+
+    roadTexture = new Texture("road-texture.png", GL_TEXTURE_2D, GL_TEXTURE1, GL_RGBA, GL_UNSIGNED_BYTE);
+    brickTexture = new Texture("seamless_brick.png", GL_TEXTURE_2D, GL_TEXTURE1, GL_RGBA, GL_UNSIGNED_BYTE);
 
     glEnable(GL_DEPTH_TEST);
 
@@ -2969,6 +3011,17 @@ int main() {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
+
+    if (roadTexture) {
+        roadTexture->Delete();
+        delete roadTexture;
+        roadTexture = nullptr;
+    }
+    if (brickTexture) {
+        brickTexture->Delete();
+        delete brickTexture;
+        brickTexture = nullptr;
+    }
 
     VAO1.Delete();
     VBO1.Delete();
