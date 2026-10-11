@@ -21,14 +21,14 @@ const unsigned int width = 1280;
 const unsigned int height = 960;
 
 // Interactive Camera Parameters
-float cameraRadius = 45.0f;  // Zoom distance
+float cameraRadius = 40.0f;  // Zoom distance
 float yaw = 90.0f;          // Horizontal angle (degrees)
-float pitch = 20.0f;         // Vertical angle (degrees)
+float pitch = 15.0f;         // Vertical angle (degrees)
 float lastX = width / 2.0f;
 float lastY = height / 2.0f;
 bool isDragging = false;
 bool firstMouse = true;
-bool firstPersonCamera = false;
+bool firstPersonCamera = true;
 glm::vec3 firstPersonPosition(3.5f, 0.7f, 44.0f);
 float firstPersonYaw = -90.0f;
 float firstPersonPitch = 0.0f;
@@ -2505,6 +2505,7 @@ void drawMovingVehicles(Shader& shaderProgram, VAO& vao, float time) {
     const float roadLength = 66.0f;
     const AutomaticBusMotion bus = getAutomaticBusMotion(time);
     const float carWheelRotation = glm::degrees(time * speed / 0.55f);
+	//drawCar(shaderProgram, vao, 20,20, -bus.direction, carWheelRotation);
     drawCar(shaderProgram, vao, (bus.direction > 0.0f ? 1.75f : 5.25f), roadStart + roadLength - bus.z, -bus.direction, carWheelRotation);
     drawBus(shaderProgram, vao, bus.x, bus.z, bus.direction, bus.wheelRotation);
 }

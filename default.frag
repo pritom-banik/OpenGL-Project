@@ -57,7 +57,14 @@ float calculateShadow(vec3 normal) {
     if (projected.z < 0.0 || projected.z > 1.0 || projected.x < 0.0 || projected.x > 1.0 || projected.y < 0.0 || projected.y > 1.0) return 0.0;
 
     float currentDepth = projected.z;
-    float bias = max(0.0015 * (1.0 - dot(normal, normalize(-shadowLightDirection))), 0.0005);
+    vec3 lightDir = normalize(-shadowLightDirection);
+
+    float ndotl = max(dot(normal, lightDir), 0.0);
+
+    float bias = max(
+        0.005 * (1.0 - ndotl),
+        0.0015
+    );
     vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
     float shadow = 0.0;
     for (int x = -1; x <= 1; ++x) {
