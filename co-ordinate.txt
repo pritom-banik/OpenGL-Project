@@ -1,0 +1,598 @@
+================================================================================
+  3D Visualization of KUET Academic Building and Surrounding Campus
+================================================================================
+
+LEGEND:
+  Local Coords   = The vertex coordinates defined in the geometry (unit-space)
+  Global Coords  = Final world-space position after translation
+  T = Translation    S = Scaling    R = Rotation
+  Texture        = No textures are used anywhere in this project.
+                   All color is passed as a solid glm::vec3 uniform (objectColor).
+  Shadow Map     = A single depth-texture (GL_DEPTH_COMPONENT, 2048x2048) is used
+                   for shadow rendering - this is NOT a visual texture on objects.
+
+================================================================================
+SECTION 1 - PRIMITIVE GEOMETRY (Local / Unit Coordinates)
+================================================================================
+
+Primitive        | Local Coordinate Range
+-----------------+--------------------------------------------------------------
+Cube (vertices[])| X: [-0.5, +0.5]  Y: [-0.5, +0.5]  Z: [-0.5, +0.5]
+                 | 6 faces (Back/Front/Left/Right/Bottom/Top), 36 vertices total
+                 | Normals: Axis-aligned outward per face
+-----------------+--------------------------------------------------------------
+Sphere           | Unit sphere: radius=1.0 centered at origin (0,0,0)
+(drawSphere)     | 16 stacks x 24 sectors; positions on unit sphere surface
+-----------------+--------------------------------------------------------------
+Cylinder         | X: [-0.5, +0.5] (width axis)
+(drawCylinder)   | YZ: unit circle radius 1.0; Outer wall + 2 circular caps
+                 | 24 segments
+-----------------+--------------------------------------------------------------
+SemiOval         | Half-cylinder (semi-oval) in local XZ: radius 1.0
+(drawSemiOval)   | Y: [-0.5, +0.5]; 20 segments, semicircle from -pi/2 to pi/2
+
+================================================================================
+SECTION 2 - GROUND PLANE
+================================================================================
+
+Object: Ground Plane (grass)
+  Function  : drawCampusScene + main render loop (drawn twice: shadow + render)
+  Color     : (0.25, 0.55, 0.22)  [grass green]
+  Primitive : Cube
+  Local Coords  : Cube unit [-0.5 to +0.5] on all axes
+  Global Origin : (0, 0, 0) -- model = identity, then scaled
+  Translation   : NONE (identity matrix)
+  Scaling       : S(150.0, 0.1, 150.0) -> flat 150x0.1x150 slab
+  Rotation      : NONE
+  Texture       : NONE
+
+================================================================================
+SECTION 3 - SUN / MOON
+================================================================================
+
+Object: Sun / Moon Sphere
+  Function  : main render loop
+  Color     : Day  -> (1.0, 0.95, 0.2) [yellow sun]
+              Night-> (0.4, 0.4,  0.5) [pale grey moon]
+  Primitive : Sphere (drawSphere), emissive=true
+  Local Coords  : Unit sphere around origin
+  Global Position: (40.0, 30.0, 15.0)
+  Translation   : T(40.0, 30.0, 15.0)  [sunPos]
+  Scaling       : S(6.0, 6.0, 6.0) -- radius 6 world units
+  Rotation      : NONE
+  Texture       : NONE
+
+================================================================================
+SECTION 4 - ACADEMIC BUILDING BLOCKS
+  (drawFourConnectedBlocks -> drawBuildingBlock x4 + drawCorridor x3 + drawBuildingExtension)
+================================================================================
+
+Called as: drawFourConnectedBlocks(shader, vao, xOffset=15.0)
+Four blocks at Z = {-9, -3, +3, +9}, all at X=15.0
+
+--- Sub-object: Tan Wall Band (per floor, 5 floors per block) ---
+  Color     : (0.78, 0.68, 0.58)
+  Local Coords  : Cube unit
+  Global Center : (xOffset, floorY-0.25, zOffset)  floorY=0.8+floor*1.3
+  Translation   : T(xOffset, floorY-0.25, zOffset)
+  Scaling       : S(8.0, 0.50, 4.0)
+  Rotation      : NONE
+  Texture       : NONE
+
+--- Sub-object: Cream Wall Band (per floor, 5 floors) ---
+  Color     : (0.94, 0.92, 0.88)
+  Global Center : (xOffset, floorY+0.35, zOffset)
+  Translation   : T(xOffset, floorY+0.35, zOffset)
+  Scaling       : S(8.0, 0.70, 4.0)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Ribbon Windows (front +Z and back -Z faces, 4 per floor) ---
+  Color     : (0.18, 0.18, 0.22)  [dark glass]
+  Global Center : Front: (xOffset+win*1.0, floorY+0.35, zOffset+2.01)
+                  Back : (xOffset+win*1.0, floorY+0.35, zOffset-2.01)
+                  win in {-3,-1,+1,+3}
+  Scaling       : S(1.4, 0.35, 0.04)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Dark Bottom Plinth ---
+  Color     : (0.25, 0.22, 0.20)
+  Global Center : (xOffset, 0.25, zOffset)
+  Scaling       : S(8.05, 0.50, 4.05)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Side Oval Balconies (SemiOval, 4 per block x 2 sides) ---
+  Color     : (0.82, 0.74, 0.64)
+  Primitive : SemiOval (half-cylinder)
+  Global Center : +X side: (xOffset+3.0, i*1.3+0.5, zOffset)  i in {1,2,3,4}
+                  -X side: (xOffset-3.0, i*1.3+0.5, zOffset)
+  Translation   : T(pos) inside drawSemiOval
+  Scaling       : rx=1.5, h=0.2, rz=1.8 (via drawSemiOval parameters)
+  Rotation      : +X side: R(0 deg, Y)  |  -X side: R(180 deg, Y)
+  Texture       : NONE
+
+--- Sub-object: Side Doors (+X and -X, 5 per side) ---
+  Color     : (0.18, 0.18, 0.22)
+  Global Center : (xOffset+/-4.0, i*1.3+1.05, zOffset)  i in {0..4}
+  Scaling       : S(0.08, 0.75, 0.80)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Front+Back Center Entrance Doors ---
+  Color     : (0.16, 0.18, 0.20)
+  Global Center : Front: (xOffset, 0.95, zOffset+2.05)
+                  Back : (xOffset, 0.95, zOffset-2.05)
+  Scaling       : S(1.2, 1.5, 0.08)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Entrance Stairs (front +Z, 4 steps) ---
+  Color     : (0.88, 0.88, 0.84)
+  Global Center : step s: (xOffset, 0.25-s*0.12, -(zOffset+2.25+s*0.45))
+  Scaling       : S(1.8, 0.12, 0.45)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Side Steps (3 steps near +X and -X doors) ---
+  Color     : (0.93, 0.93, 0.90)
+  Global Center : +X side: (xOffset+4.0, 0.1, zOffset)  -X side: (xOffset-4.0, 0.1, zOffset)
+  Scaling       : S(stepDepth, stepY, 2.4+s*0.2)  s in {0,1,2}
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Building Extension Canopy (at block Z=9, last block) ---
+  Color     : (0.75, 0.65, 0.55)  [balcony tan]
+  Global Center : (xOffset, 3.6, 11.75)   [frontFaceZ+overhangDepth/2]
+  Scaling       : S(8.6, 0.25, 1.5)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Colonnade Pillars (10 pillars, extension) ---
+  Color     : (0.90, 0.90, 0.88)
+  Global Center : (xOffset-3.9+p*(7.8/9), 1.8, 12.35)  p in {0..9}
+  Scaling       : S(0.2, 3.6, 0.2)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Horizontal Balcony Bands (5 floors, extension front) ---
+  Color     : (0.75, 0.65, 0.55)
+  Global Center : (xOffset, i*1.3, frontFaceZ+0.15)  i in {1..5}
+  Scaling       : S(8.3, 0.18, 0.30)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Skybridge Corridor Floor Slab (3 corridors between blocks) ---
+  Color     : (0.88, 0.82, 0.72)  [tan slab]
+  Global Center : (xOffset, floor*1.3, midZ)  floor in {0..4},  midZ in {-6, 0, +6}
+  Scaling       : S(2.6, 0.18, gapLength)  gapLength=(z2-z1)-3.8
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Corridor Parapet Walls (front + back, 5 floors per corridor) ---
+  Color     : (0.78, 0.68, 0.58)
+  Global Center : front: (xOffset+1.25, floor*1.3+0.30, midZ)
+                  back : (xOffset-1.25, floor*1.3+0.30, midZ)
+  Scaling       : S(0.10, 0.45, gapLength)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Corridor Handrails (top metallic trim) ---
+  Color     : (0.75, 0.75, 0.78)  [silver]
+  Scaling   : S(0.06, 0.08, gapLength)
+  Rotation  : NONE  |  Texture: NONE
+
+================================================================================
+SECTION 5 - FFHDRH BUILDINGS (Faculty/Female Hall - U-shape, 3 stories)
+================================================================================
+
+Called as:
+  FFH: drawFFHDRH(shader, vao, x=-11, z= 3, w=7, d=10, h=3.75, wallThick=1.2, ...)
+  DRH: drawFFHDRH(shader, vao, x=-11, z=23, w=7, d=10, h=3.75, wallThick=1.2, ...)
+
+h1 = h/3 = 1.25 (1-story height)
+Derived wall centers (FFH, z=3):
+  northZ=-1.8, southZ=7.8, westX=-14.9, eastX=-7.1
+
+--- Sub-object: South Wing (1-story front wall) ---
+  Color     : (0.88, 0.68, 0.72)  [pink plaster]
+  Global Center : (southWallCenterX=x-wallThick/2=-11.6, h1/2=0.625, southZ=7.8)
+  Scaling       : S(southWallWidth=w-wallThick=5.8, h1=1.25, wallThick=1.2)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: South Wing Plinth Base ---
+  Color     : (0.25, 0.22, 0.20)
+  Global Center : (-11.6, 0.15, 7.8)
+  Scaling       : S(5.85, 0.30, 1.25)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: South Wing Parapet Cap ---
+  Color     : (0.93, 0.93, 0.90)
+  Global Center : (-11.6, h1+0.10=1.35, 7.8)
+  Scaling       : S(5.8, 0.20, 1.28)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Ground Floor Windows on South Wall (3 windows) ---
+  Color (day)  : (0.18, 0.22, 0.28)  [tinted dark glass]
+  Color (night): (1.0, 0.62, 0.26)   [warm lit orange]
+  Global Center : (winX, h1*0.55, southZ+wallThick/2+0.02)  3 evenly spaced
+  Scaling       : S(stepSouthWin*0.45, h1*0.40, 0.05)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Entry Canopy (+X south-east corner facing east) ---
+  Color     : (0.93, 0.93, 0.90)
+  Global Center : (outerEastX=-7.7, h1*0.85=1.06, southZ=7.8)
+  Scaling       : S(0.70, 0.15, entryLengthZ*0.90)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Entry Door ---
+  Color     : (0.12, 0.12, 0.14)
+  Global Center : (outerEastX, h1*0.40=0.50, southZ)
+  Scaling       : S(0.06, h1*0.70, entryLengthZ*0.70)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Entrance Stairs (5 steps, facing +X) ---
+  Color     : (0.93, 0.93, 0.90)
+  Global Center : (outerEastX+stepDepth/2, stepY, southZ)
+  Scaling       : S(stepDepth, 0.06, entryLengthZ*0.85)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: West Wing (3-story) ---
+  Color     : (0.88, 0.68, 0.72)
+  Global Center : (westX=-14.9, h/2=1.875, z=3)
+  Scaling       : S(wallThick=1.2, h=3.75, sideWingDepth+2*wallThick=9.8)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: East Wing (3-story) ---
+  Global Center : (eastX=-7.1, h/2=1.875, z-wallThick/2=2.4)
+  Scaling       : S(1.2, 3.75, sideWingDepth+wallThick=8.8)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: North Wing (1-story) ---
+  Global Center : (x-wallThick/2=-11.6, h1/2=0.625, northZ-wallThick/2=-2.4)
+  Scaling       : S(w-wallThick=5.8, h1=1.25, wallThick*2=2.4)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Plinth Bases (W/E/N wings) ---
+  Color : (0.25, 0.22, 0.20)
+  westX: T(westX, 0.15, z), S(wallThick+0.05, 0.30, sideWingDepth+2*wallThick)
+  eastX: T(eastX, 0.15, z-wallThick/2), S(wallThick+0.05, 0.30, sideWingDepth+wallThick)
+  northZ: T(x-wallThick/2, 0.15, northZ-wallThick/2), S(w-wallThick+0.05, 0.30, wallThick*2+0.05)
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: Roof Parapet Caps (W/E/N wings) ---
+  Color : (0.93, 0.93, 0.90)  [whiteTrim]
+  Same positions as wings but at Y=h+0.10 / h1+0.10
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: Horizontal Facade Ledges (3 floors per W and E outer faces) ---
+  Color : (0.93, 0.93, 0.90)
+  West: T(westX-wallThick/2-0.02, ledgeY, z), S(0.08, 0.12, sideWingDepth+2*wallThick)
+  East: T(eastX+wallThick/2+0.02, ledgeY, z-wallThick/2), S(0.08, 0.12, ...)
+  ledgeY = floor * h1  floor in {1,2,3}
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: Outer Windows (West, East, North facades, 3 floors, 6 bays) ---
+  Color: day=(0.18,0.22,0.28)  night=(1.0,0.62,0.26)
+  West outer: T(outerWestX, winY, winZ), S(0.05, h1*0.40, stepZ*0.55)
+  East outer: T(outerEastX, winY, winZ), S(0.05, h1*0.40, stepZ*0.55)
+  North outer: T(winX, winY, outerNorthZ-wallThick), S(stepX*0.55, h1*0.40, 0.05)
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: Inner Courtyard Pillars (4 per side, W and E inner walls) ---
+  Color : (0.93, 0.93, 0.90)
+  West inner: T(innerWestX+0.02, h/2, colZ), S(0.08, h, 0.1)
+  East inner: T(innerEastX-0.02, h/2, colZ), S(0.08, h, 0.1)
+  colZ offsets: {z-depth*0.40, z+depth*0.40, z-depth*0.10, z+depth*0.10}
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: Inner Courtyard Windows (3 floors per W and E inner walls) ---
+  West inner: T(innerWestX, winY, z), S(0.05, h1*0.50, sideWingDepth+1.5)
+  East inner: T(innerEastX, winY, z), S(0.05, h1*0.50, sideWingDepth)
+  Rotation: NONE  |  Texture: NONE
+
+================================================================================
+SECTION 6 - SSHAKH BUILDINGS (Student/Staff Hall - 5-story closed quadrangle)
+================================================================================
+
+Called as:
+  AEH: drawSSHAKH(shader, vao, x=-22, z=-5,  w=12, d=12, h=5.83, wallThick=1.5, ...)
+  SSH: drawSSHAKH(shader, vao, x=-22, z=12,  w=12, d=15, h=5.83, wallThick=1.8, ...)
+
+h1 = h/5 = 1.166 (1-story height)
+AEH wall centers: northZ=-10.5, southZ=-0.5, westX=-26.5, eastX=-17.5
+SSH wall centers: northZ= -1.5, southZ=19.5, westX=-26.5, eastX=-17.5
+
+--- Sub-object: West Wing (5-story) ---
+  Color     : (0.88, 0.68, 0.72)  [pink plaster]
+  Global Center : (westX, h/2, z)
+  Scaling       : S(wallThick, h, d)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: East Wing (5-story) ---
+  Global Center : (eastX, h/2, z)
+  Scaling       : S(wallThick, h, d)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: North Wing (5-story) ---
+  Global Center : (x, h/2, northZ)
+  Scaling       : S(wingWidth=w-2*wallThick, h, wallThick)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: South Wing (5-story) ---
+  Global Center : (x, h/2, southZ)
+  Scaling       : S(wingWidth, h, wallThick)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Plinth Bases (all 4 wings) ---
+  Color: (0.25, 0.22, 0.20)
+  W: T(westX,0.15,z), S(wallThick+0.05, 0.30, d+0.05)
+  E: T(eastX,0.15,z), S(wallThick+0.05, 0.30, d+0.05)
+  N: T(x,0.15,northZ), S(wingWidth+0.05, 0.30, wallThick+0.05)
+  S: T(x,0.15,southZ), S(wingWidth+0.05, 0.30, wallThick+0.05)
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: Roof Parapet Caps (all 4 wings) ---
+  Color: (0.93, 0.93, 0.90)
+  W: T(westX, h+0.10, z), S(wallThick+0.10, 0.20, d+0.10)
+  E: T(eastX, h+0.10, z), S(wallThick+0.10, 0.20, d+0.10)
+  N: T(x, h+0.10, northZ), S(wingWidth+0.10, 0.20, wallThick+0.10)
+  S: T(x, h+0.10, southZ), S(wingWidth+0.10, 0.20, wallThick+0.10)
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: East Entrance Canopy (center of east wall, facing +X) ---
+  Color: (0.93, 0.93, 0.90)
+  Global Center : (outerEastX+0.35, h1*0.85, z)
+  Scaling       : S(0.80, 0.15, entryLengthZ=wallThick*2.5)
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: East Entrance Door ---
+  Global Center : (outerEastX+0.01, h1*0.40, z)
+  Scaling       : S(0.06, h1*0.70, entryLengthZ*0.70)
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: Entrance Stairs (5 steps facing +X) ---
+  Global Center : (outerEastX+stepDepth/2, stepY, z)
+  Scaling       : S(stepDepth, 0.06, entryLengthZ*0.90)
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: Facade Horizontal Ledges (5 floors, all 4 outer faces) ---
+  ledgeY = floor * h1  floor in {1..5}
+  West: T(westX-wallThick/2-0.02, ledgeY, z), S(0.08, 0.12, d)
+  East: T(eastX+wallThick/2+0.02, ledgeY, z), S(0.08, 0.12, d)
+  North: T(x, ledgeY, northZ-wallThick/2-0.02), S(w, 0.12, 0.08)
+  South: T(x, ledgeY, southZ+wallThick/2+0.02), S(w, 0.12, 0.08)
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: Outer Windows (5 floors, 6 bays, all 4 facades) ---
+  Color: day=(0.18,0.22,0.28)  night=(1.0,0.62,0.26)
+  All facades: 6 bays per floor, 5 floors
+  West outer: T(outerWestX, winY, winZ), S(0.05, h1*0.40, stepZ*0.55)
+  East outer: T(outerEastX, winY, winZ), S(0.05, h1*0.40, stepZ*0.55)
+  North outer: T(winX, winY, outerNorthZ), S(stepX*0.55, h1*0.40, 0.05)
+  South outer: T(winX, winY, outerSouthZ), S(stepX*0.55, h1*0.40, 0.05)
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: Inner Courtyard Pillars (5 per inner wall, 4 walls) ---
+  Color: (0.93, 0.93, 0.90)
+  West inner: T(innerWestX+0.02, h/2, colZ), S(0.08, h, 0.10)
+  East inner: T(innerEastX-0.02, h/2, colZ), S(0.08, h, 0.10)
+  North inner: T(colX, h/2, innerNorthZ+0.02), S(0.10, h, 0.08)
+  South inner: T(colX, h/2, innerSouthZ-0.02), S(0.10, h, 0.08)
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: Inner Windows (5 floors, all 4 inner walls) ---
+  West inner: T(innerWestX, winY, z), S(0.05, h1*0.50, sideWingDepth*0.75)
+  East inner: T(innerEastX, winY, z), S(0.05, h1*0.50, sideWingDepth*0.75)
+  North inner: T(x, winY, innerNorthZ), S(wingWidth*0.75, h1*0.50, 0.05)
+  South inner: T(x, winY, innerSouthZ), S(wingWidth*0.75, h1*0.50, 0.05)
+  Rotation: NONE  |  Texture: NONE
+
+================================================================================
+SECTION 7 - LSH BUILDING (Ladies/Library Hall - solid rectangular box, 5 stories)
+================================================================================
+
+Called as:
+  LHS: drawLSH(shader, vao, x=-13, z=-13, w=2, d=10, h=3.75, wallThick=1.2, ...)
+
+h1 = h/5 = 0.75
+Wall centers: northZ=-17.4, southZ=-8.6, westX=-14.0, eastX=-12.0
+
+--- Sub-object: Main Building Body ---
+  Color     : (0.88, 0.68, 0.72)  [pink plaster]
+  Global Center : (-13, h/2=1.875, -13)
+  Translation   : T(-13, 1.875, -13)
+  Scaling       : S(w=2.0, h=3.75, d=10.0)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Plinth Base ---
+  Global Center : (-13, 0.15, -13)
+  Scaling       : S(2.05, 0.30, 10.05)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Roof Parapet Cap ---
+  Global Center : (-13, h+0.10=3.85, -13)
+  Scaling       : S(2.10, 0.20, 10.10)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Entry Canopy (north-west corner, facing west/-X) ---
+  Global Center : (outerWestX-0.30, h1*0.85, northZ=-17.4)
+  Scaling       : S(0.70, 0.15, entryLengthZ*0.90)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Entry Door (facing -X) ---
+  Global Center : (outerWestX, h1*0.40, northZ)
+  Scaling       : S(0.06, h1*0.70, entryLengthZ*0.70)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Entry Stairs (5 steps, extending -X) ---
+  Global Center : (outerWestX-stepDepth/2, stepY, northZ)
+  Scaling       : S(stepDepth, 0.06, entryLengthZ*0.85)
+  Rotation      : NONE  |  Texture: NONE
+
+--- Sub-object: Facade Ledges (5 floors, all 4 outer faces) ---
+  [Same structure as SSHAKH ledges]
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: Outer Windows (5 floors, 6 bays per facade) ---
+  Color: day=(0.18,0.22,0.28)  night=(1.0,0.62,0.26)
+  [Same layout as SSHAKH but for this building dimensions]
+  Rotation: NONE  |  Texture: NONE
+
+================================================================================
+SECTION 8 - BRH BUILDING (Boys Residential Hall - 180-degree mirrored FFHDRH)
+================================================================================
+
+Called as:
+  BRH: drawBRH(shader, vao, x=27, z=23, w=7, d=10, h=3.75, wallThick=1.2, ...)
+
+NOTE: All positions are flipped 180-degrees around building center using:
+  rotX(px) = 2*27 - px = 54 - px
+  rotZ(pz) = 2*23 - pz = 46 - pz
+This is coordinate reflection, NOT a glm::rotate call.
+
+h1 = h/3 = 1.25
+Wall centers (before mirroring): northZ=18.2, southZ=27.8, westX=23.1, eastX=30.9
+
+--- Sub-object: 1-Story Wing (mirrored south -> north) ---
+  Effective Global Center: (54-southWallCenterX, h1/2, 46-southZ)
+                           = (54-27.6, 0.625, 46-27.8) = (26.4, 0.625, 18.2)
+  Scaling: S(5.8, 1.25, 1.2)
+  Rotation: NONE (reflection via coordinate arithmetic)
+  Texture: NONE
+
+--- Sub-object: West/East Wings, North Wing (3-story, all mirrored) ---
+  West:  T(54-westX=30.9, h/2, 46-z=23), S(wallThick, h, sideWingDepth+2*wallThick)
+  East:  T(54-eastX=23.1, h/2, 46-(z-wallThick/2)), S(wallThick, h, ...)
+  North: T(54-(x-wallThick/2), h1/2, 46-(northZ-wallThick/2)), S(w-wallThick, h1, ...)
+  Rotation: NONE  |  Texture: NONE
+
+--- Sub-object: Entry, Windows, Pillars (all rotX/rotZ mirrored) ---
+  [Same geometry as FFHDRH but positions flipped; no extra rotation applied]
+  Texture: NONE
+
+================================================================================
+SECTION 9 - ROADS (drawRoads)
+================================================================================
+
+Road       | Global Center (X, Y, Z) | Scale (X, Y, Z)       | Rotation | Texture
+-----------+-------------------------+-----------------------+----------+--------
+Main Road  | (3.5, 0.05, 13.0)       | (7.0, 0.02, 66.0)     | NONE     | NONE
+(N-S)      | Color: (0.25,0.25,0.25) | [asphalt]             |          |
+-----------+-------------------------+-----------------------+----------+--------
+Road Stripe| (3.5, 0.07, z)          | (0.2, 0.02, 2.0)      | NONE     | NONE
+(N-S dashes| z from -18 to +44 step4 | Color:(0.95,0.85,0.10)|          |
+-----------+-------------------------+-----------------------+----------+--------
+Back Road  | (21.0, 0.05, 0.0)       | (3.0, 0.02, 60.0)     | NONE     | NONE
+(N-S east) | Color: (0.25,0.25,0.25) |                       |          |
+-----------+-------------------------+-----------------------+----------+--------
+Back Stripe| (21.0, 0.07, z)         | (0.2, 0.02, 2.0)      | NONE     | NONE
+           | z from -28 to +28 step4 |                       |          |
+-----------+-------------------------+-----------------------+----------+--------
+Connect Rd1| (14.0, 0.05, -17.0)     | (14.0, 0.02, 5.2)     | NONE     | NONE
+(E-W upper)|                         |                       |          |
+-----------+-------------------------+-----------------------+----------+--------
+Connect Rd2| (14.0, 0.05, 26.0)      | (14.0, 0.02, 5.2)     | NONE     | NONE
+(E-W lower)|                         |                       |          |
+-----------+-------------------------+-----------------------+----------+--------
+Academic Rd| (14.0, 0.05, 12.0)      | (14.0, 0.02, 2.2)     | NONE     | NONE
+-----------+-------------------------+-----------------------+----------+--------
+FFH Road   | (-4.0, 0.05, 7.0)       | (9.0, 0.02, 2.0)      | NONE     | NONE
+DRH Road   | (-4.0, 0.05, 27.0)      | (9.0, 0.02, 2.0)      | NONE     | NONE
+SSH Road   | (-8.0, 0.05, 12.0)      | (16.0, 0.02, 2.0)     | NONE     | NONE
+AEH Road   | (-8.0, 0.05, -5.0)      | (16.0, 0.02, 2.0)     | NONE     | NONE
+
+================================================================================
+SECTION 10 - ROUNDABOUT (drawRoundabout) -- Center: (15.2, 0, 18.0)
+================================================================================
+
+Sub-object | Global Center (X,Y,Z)    | Scale (X,Y,Z)    | Rotation | Texture
+-----------+--------------------------+------------------+----------+--------
+Ring       | (15.2, 0.05, 18.0)       | (8.0, 0.02, 8.0) | NONE     | NONE
+(asphalt)  | Color:(0.25,0.25,0.25)   |                  |          |
+-----------+--------------------------+------------------+----------+--------
+Island     | (15.2, 0.15, 18.0)       | (4.0, 0.2, 4.0)  | NONE     | NONE
+(grass)    | Color:(0.2, 0.6, 0.2)    |                  |          |
+-----------+--------------------------+------------------+----------+--------
+Monument   | (15.2, 1.2, 18.0)        | (1.0, 2.0, 1.0)  | NONE     | NONE
+(obelisk)  | Color:(0.8, 0.8, 0.8)    |                  |          |
+
+SECTION 11 - TREES
+Positions: X=-3.2,8.8 at Z={-22,-14,-6,4,10,18,23,30}; X=27.8 at Z<18; Extra (16,22),(16,31)
+Trunk  : Global(x,1.25,z), S(0.4,2.5,0.4), Color(0.35,0.20,0.10), Rot=NONE, Tex=NONE
+Foliage1: Global(x,3.0,z), S(2.0,1.5,2.0), Color(0.12,0.50,0.18), Rot=NONE, Tex=NONE
+Foliage2: Global(x,4.2,z), S(1.3,1.2,1.3), Color(0.12,0.50,0.18), Rot=NONE, Tex=NONE
+
+SECTION 12 - STREET LAMP POSTS
+Posts: X in {-0.5,7.5} x Z in {-10,2,14,22,32} => 10 posts; X=25.5 x Z in {-10,2,14} => 3 posts
+Pedestal1: T(x,0.10,z), S(0.50,0.20,0.50), Color(0.48,0.34,0.16), Rot=NONE, Tex=NONE
+Pedestal2: T(x,0.45,z), S(0.35,0.50,0.35), Color(0.48,0.34,0.16), Rot=NONE, Tex=NONE
+BaseCap  : T(x,0.75,z), S(0.42,0.10,0.42), Color(0.48,0.34,0.16), Rot=NONE, Tex=NONE
+Pole(cyl): T(x,2.48,z), radius=0.08, height=3.40, Rot=R(90deg,Z) to orient vertical, Tex=NONE
+Gold Ring: T(x,3.80,z), S(0.20,0.08,0.20), Rot=NONE, Tex=NONE
+Cross Arm: T(x,4.35,z), S(2.20,0.12,0.12), Rot=NONE, Tex=NONE
+Crest Arch: T(x,4.55,z), S(0.80,0.30,0.10), Rot=NONE, Tex=NONE
+Top Finial: T(x,4.85,z), S(0.12,0.30,0.12), Rot=NONE, Tex=NONE
+Shade(sph x2): T(x+/-1.0,4.22,z), S(0.34,0.18,0.34), Rot=NONE, Tex=NONE
+Bulb (sph x2): T(x+/-1.0,4.02,z), S(0.14,0.12,0.14), Rot=NONE, Tex=NONE
+  LIT color=(1.0,0.56,0.20) emissive=true; OFF color=(0.24,0.27,0.29)
+
+SECTION 13 - CAR (drawCar)
+Base: carMat = T(x,0,z) then R(0 or 180 deg, Y). All children inherit this.
+Main Body:       local T(0,0.42,0),   S(1.50,0.45,3.40), Rot=carMat, Tex=NONE
+Front Bumper:    local T(0,0.30,+1.71),S(1.52,0.22,0.08),Rot=carMat, Tex=NONE
+Rear Bumper:     local T(0,0.30,-1.71),S(1.52,0.22,0.08),Rot=carMat, Tex=NONE
+Roof Panel:      local T(0,1.12,-0.15),S(1.36,0.05,1.35),Rot=carMat, Tex=NONE
+Cabin Core:      local T(0,0.88,-0.15),S(1.34,0.48,1.35),Rot=carMat, Tex=NONE
+Front Windshield:local T(0,0.90,+0.72),S(1.32,0.52,0.04),Rot=R(-28deg,X)+carMat,Tex=NONE
+Rear Windshield: local T(0,0.90,-1.02),S(1.32,0.50,0.04),Rot=R(+26deg,X)+carMat,Tex=NONE
+Side Win L Fwd:  local T(-0.685,0.90,+0.18),S(0.03,0.38,0.55),Rot=carMat,Tex=NONE
+Side Win L Rear: local T(-0.685,0.90,-0.48),S(0.03,0.38,0.55),Rot=carMat,Tex=NONE
+Side Win R Fwd:  local T(+0.685,0.90,+0.18),S(0.03,0.38,0.55),Rot=carMat,Tex=NONE
+Side Win R Rear: local T(+0.685,0.90,-0.48),S(0.03,0.38,0.55),Rot=carMat,Tex=NONE
+B-Pillar L:      local T(-0.69,0.90,-0.15),S(0.04,0.40,0.08),Rot=carMat,Tex=NONE
+B-Pillar R:      local T(+0.69,0.90,-0.15),S(0.04,0.40,0.08),Rot=carMat,Tex=NONE
+Headlight L:     local T(-0.52,0.48,+1.71),S(0.28,0.16,0.04),Rot=carMat,Tex=NONE
+Headlight R:     local T(+0.52,0.48,+1.71),S(0.28,0.16,0.04),Rot=carMat,Tex=NONE
+Tail Light L:    local T(-0.66,0.50,-1.71),S(0.12,0.28,0.04),Rot=carMat,Tex=NONE
+Tail Light R:    local T(+0.66,0.50,-1.71),S(0.12,0.28,0.04),Rot=carMat,Tex=NONE
+Wheels (x4):     local T(wX,r+0.20,wZ), wX:{+-0.78}, wZ:{+-1.05}
+                 r=0.15, width=0.22, Rot=R(wheelRot,X) spin by travel, Tex=NONE
+  Tire (cyl): r=0.15, color=(0.10,0.10,0.10)
+  Rim  (cyl): r=0.0975, color=(0.75,0.75,0.78)
+  Spoke1(cube): S(w*1.05,r*1.1,r*0.18)
+  Spoke2(cube): S(w*1.05,r*0.18,r*1.1)
+
+SECTION 14 - BUS (drawBus)
+Base: busMat = T(x,0,z) then R(0 or 180 deg, Y). All children inherit this.
+Going +Z: X=5.25; Going -Z: X=1.75
+Maroon Skirt:     local T(0,0.55,0),  S(2.2,0.7,7.6),   Rot=busMat, Tex=NONE
+Maroon Stripe:    local T(0,0.95,0),  S(2.22,0.15,7.62),Rot=busMat, Tex=NONE
+Upper White Body: local T(0,1.85,0),  S(2.18,1.65,7.58),Rot=busMat, Tex=NONE
+Roof Cap:         local T(0,2.72,0),  S(2.22,0.12,7.62),Rot=busMat, Tex=NONE
+Side Win L (x6):  local T(-1.10,1.95,winZ), S(0.05,0.85,0.85), winZ: -2.7 step 1.05, Tex=NONE
+Side Win R (x6):  local T(+1.10,1.95,winZ), S(0.05,0.85,0.85), Tex=NONE
+Front Windshield: local T(0,2.05,+3.80), S(2.0,1.1,0.05), Rot=busMat, Tex=NONE
+Rear Window:      local T(0,2.05,-3.80), S(1.9,0.9,0.05), Rot=busMat, Tex=NONE
+Front Bumper:     local T(0,0.45,+3.82), S(2.2,0.5,0.08), Rot=busMat, Tex=NONE
+Front Grille:     local T(0,0.85,+3.83), S(1.1,0.30,0.05), Rot=busMat, Tex=NONE
+Headlight L:      local T(-0.80,0.82,+3.84), S(0.30,0.20,0.05), Rot=busMat, Tex=NONE
+Headlight R:      local T(+0.80,0.82,+3.84), S(0.30,0.20,0.05), Rot=busMat, Tex=NONE
+Mirror Arm L:     local T(-1.25,2.05,+3.5), S(0.25,0.06,0.06), Rot=busMat, Tex=NONE
+Mirror Head L:    local T(-1.38,1.95,+3.5), S(0.08,0.35,0.18), Rot=busMat, Tex=NONE
+Mirror Arm R:     local T(+1.25,2.05,+3.5), S(0.25,0.06,0.06), Rot=busMat, Tex=NONE
+Mirror Head R:    local T(+1.38,1.95,+3.5), S(0.08,0.35,0.18), Rot=busMat, Tex=NONE
+Wheels (x4):      local T(wX,r+0.35,wZ), wX:{+-1.08}, wZ:{+-2.2}
+                  r=0.30, width=0.35, Rot=R(wheelRot,X), Tex=NONE
+
+SECTION 15 - HELPER FUNCTION SUMMARY
+drawCube()           : Accepts model matrix; no extra transform inside
+drawSphere()         : Accepts model matrix; no extra transform inside
+drawCylinder()       : Applies S(width, radius*2, radius*2) to input matrix
+drawSemiOval()       : Internally T(pos)->R(rotY,Y)->S(rx,h,rz)
+draw3DWheel()        : Cylinder for tire+rim; Cube for 2 spokes
+drawVerticalCylinder : Lambda: T(pos)->R(90deg,Z)->drawCylinder (makes vertical)
+drawCar()            : carMat R(0/180,Y); windshields R(+-28/26deg,X)
+drawBus()            : busMat R(0/180,Y); no per-part rotation
+drawBRH()            : Uses rotX(px)=2*x-px, rotZ(pz)=2*z-pz for mirroring
+
+
+SECTION 17 - GLOBAL COORDINATE SYSTEM
++X=East, +Y=Up, +Z=South (toward viewer in default orbit view)
+Scene bounds: X[-26.5,+32], Y[0,+6], Z[-22,+33]
+Camera orbit: target=(0,0,0), radius=45, yaw=90deg, pitch=20deg, zoom[5,120]
+Camera FPS: start=(3.5,0.7,44.0), walk clamp X[-35,35] Z[-35,48]
+Sun directional: from (40,30,15) toward (0,0,0)
+Point light: (-10,16,2)
+26 spot lights at Y=4.02 (lamp post bulbs)
+Shadow map: 2048x2048, ortho 180x180 for sun, perspective for others
+

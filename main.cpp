@@ -231,7 +231,7 @@ void processInput(GLFWwindow* window, float deltaTime) {
 
     //=============================================================
 
-    // Shading Mode Toggles (Q = Flat, W = Gouraud, E = Phong)
+    // Shading Mode Toggles (F = Flat, G = Gouraud, P = Phong)
     static bool qPressed = false, wPressed = false, ePressed = false;
 
     if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
@@ -2558,6 +2558,8 @@ void drawCampusScene(Shader& shaderProgram, VAO& vao, float time) {
     drawFFHDRH(shaderProgram, vao, -11.0f, 3.0f, 7.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f));
     drawFFHDRH(shaderProgram, vao, -11.0f, 23.0f, 7.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f));
     drawLSH(shaderProgram, vao, -13.0f, -13.0f, 2.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f));
+    drawBRH(shaderProgram, vao, 27.0f, 23.0f, 7.0f, 10.0f, 3.75f, 1.2f, glm::vec3(0.80f, 0.70f, 0.60f)); // BRH
+
     drawRoads(shaderProgram, vao);
     drawRoundabout(shaderProgram, vao);
 
@@ -2666,7 +2668,7 @@ int main() {
         if (shadowDisplayW == 0) shadowDisplayW = 1;
         if (shadowDisplayH == 0) shadowDisplayH = 1;
         glm::vec3 sunDirection = glm::normalize(-sunPos);
-        const glm::vec3 pointPosition(-10.0f, 16.0f, 2.0f);
+        const glm::vec3 pointPosition(14.0f, 2.0f, 9.5f);
         const bool hallWindowLightsActive = hallWindowLightsOn && !isDayMode;
         glm::vec3 shadowLightPosition = sunPos;
         glm::vec3 shadowLightDirection = sunDirection;
@@ -2691,7 +2693,7 @@ int main() {
             shadowSourceType = 3;
         }
         else if (areaLightOn) {
-            shadowLightPosition = glm::vec3(-16.0f, 18.0f, 10.0f);
+            shadowLightPosition = glm::vec3(-16.0f, 3.0f, 10.0f);
             shadowLightDirection = glm::normalize(-shadowLightPosition);
             shadowSourceType = 4;
         }
